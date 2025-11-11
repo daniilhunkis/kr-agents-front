@@ -1,3 +1,4 @@
+import type { ObjectItem } from "../components/ObjectCard";
 import ObjectCard from "../components/ObjectCard";
 import { useMemo, useState } from "react";
 

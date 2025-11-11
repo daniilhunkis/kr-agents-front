@@ -1,4 +1,4 @@
-import { WebApp } from "@twa-dev/sdk";
+import WebApp from "@twa-dev/sdk";
 
 export type TGUser = {
   id: number;

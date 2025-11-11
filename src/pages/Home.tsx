@@ -8,6 +8,13 @@ export default function Home() {
   const [stories, setStories] = useState<any[]>([]);
   const [objects, setObjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const onShow = (id: string) => {
+    window.location.href = `/shows?object_id=${id}`;
+  };
+
+  const onFav = (id: string) => {
+    alert(`Добавлено в избранное: ${id}`);
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -51,8 +58,16 @@ export default function Home() {
       {/* Объекты */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {objects.map((o) => (
-          <ObjectCard key={o.id} item={o} onShow={() => alert(`Открываем ${o.id}`)} />
+          <ObjectCard key={o.id} item={o} onShow={onShow} onFavorite={onFav} />
         ))}
+      </div>
+      <div className="flex flex-col gap-4">
+        {/* лучшие предложения */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {objects.map((o) => (
+            <ObjectCard key={o.id} item={o} onShow={onShow} onFavorite={onFav} />
+          ))}
+        </div>
       </div>
     </div>
   );
