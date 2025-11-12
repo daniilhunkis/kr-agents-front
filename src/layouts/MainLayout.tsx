@@ -1,3 +1,4 @@
+// src/layouts/MainLayout.tsx
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import WebApp from "@twa-dev/sdk";
@@ -7,32 +8,35 @@ export default function MainLayout() {
   const location = useLocation();
   const [role, setRole] = useState<string>("user");
 
-  const API_BASE = import.meta.env.VITE_API_URL; // https://api.krd-agents.ru
+  const API_BASE = import.meta.env.VITE_API_URL || "https://api.krd-agents.ru";
 
   useEffect(() => {
-    const loadRole = async () => {
+    const checkRole = async () => {
       try {
         const tgUser = WebApp.initDataUnsafe?.user;
-        if (!tgUser) return;
+        console.log("TG USER in MainLayout:", tgUser);
 
-        console.log("Checking user role for:", tgUser.id);
-
-        // запрос в backend
-        const res = await axios.get(`${API_BASE}/api/user/${tgUser.id}`);
-
-        console.log("User response:", res.data);
-
-        if (res.data.role) {
-          setRole(res.data.role);
-        } else {
-          setRole("user");
+        if (!tgUser) {
+          console.log("Нет tgUser — обычный браузер или WebApp не инициализирован");
+          return;
         }
+
+        const url = `${API_BASE}/api/user/${tgUser.id}`;
+        console.log("Role check URL:", url);
+
+        const res = await axios.get(url);
+        console.log("Response from /api/user/{id}:", res.data);
+
+        const r = res.data.role || "user";
+        setRole(r);
+        console.log("Final role in state:", r);
       } catch (err: any) {
-        console.error("Ошибка получения роли:", err.response || err);
+        console.error("Ошибка проверки роли", err);
+        setRole("user");
       }
     };
 
-    loadRole();
+    checkRole();
   }, []);
 
   const menuItems = [
@@ -40,8 +44,6 @@ export default function MainLayout() {
     { to: "/search", label: "🔎 Поиск" },
     { to: "/express", label: "⚡ Экспресс" },
     { to: "/profile", label: "👤 Мои объекты" },
-
-    // показываем админку только если admin или moderator
     ...(role === "admin" || role === "moderator"
       ? [{ to: "/admin", label: "⚙️ Админ" }]
       : []),
@@ -54,8 +56,8 @@ export default function MainLayout() {
         <Outlet />
       </main>
 
-      {/* Нижнее меню */}
-      <nav className="flex justify-around bg-gray-800/80 py-3 border-t border-gray-700 backdrop-blur-md">
+      {/* Нижнее меню — фиксируем внизу */}
+      <nav className="fixed bottom-0 left-0 right-0 flex justify-around bg-gray-800/90 py-3 border-t border-gray-700 backdrop-blur-md">
         {menuItems.map((item) => (
           <Link
             key={item.to}
@@ -70,6 +72,9 @@ export default function MainLayout() {
           </Link>
         ))}
       </nav>
+
+      {/* чтобы контент не залезал под меню */}
+      <div className="h-16" />
     </div>
   );
 }
