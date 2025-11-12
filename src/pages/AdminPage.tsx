@@ -1,17 +1,45 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 
 export default function AdminPage() {
   const [authorized, setAuthorized] = useState(false);
   const [password, setPassword] = useState("");
+  const [users, setUsers] = useState<any[]>([]);
 
-  const correctPassword = "krd2025"; // 🔐 можно сменить на любой
+  const correctPassword = "krd2025";
+  const API_BASE = import.meta.env.VITE_API_URL || "https://api.krd-agents.ru";
+  const ADMIN_ID = 776430926; // твой Telegram ID
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (password === correctPassword) {
       setAuthorized(true);
     } else {
-      alert("Неверный пароль ❌");
+      alert("Неверный пароль");
+    }
+  };
+
+  useEffect(() => {
+    if (authorized) {
+      axios
+        .get(`${API_BASE}/users?admin_id=${ADMIN_ID}`)
+        .then((res) => setUsers(res.data))
+        .catch((err) => console.error(err));
+    }
+  }, [authorized]);
+
+  const handleRoleChange = async (id: number, role: string) => {
+    try {
+      await axios.patch(`${API_BASE}/users/${id}/role`, {
+        role,
+        admin_id: ADMIN_ID,
+      });
+      alert("Роль успешно обновлена");
+      setUsers((prev) =>
+        prev.map((u) => (u.id === id ? { ...u, role } : u))
+      );
+    } catch (err) {
+      alert("Ошибка при обновлении роли");
     }
   };
 
@@ -19,7 +47,7 @@ export default function AdminPage() {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
         <form
-          onSubmit={handleSubmit}
+          onSubmit={handleLogin}
           className="bg-neutral-900 p-6 rounded-2xl shadow-lg w-full max-w-sm flex flex-col gap-4"
         >
           <h2 className="text-xl font-semibold text-center mb-2">
@@ -46,19 +74,44 @@ export default function AdminPage() {
 
   return (
     <div className="p-4 text-white bg-black min-h-screen">
-      <h1 className="text-2xl font-bold mb-4">Админ-панель</h1>
-      <p>Добро пожаловать, главный администратор 👑</p>
+      <h1 className="text-2xl font-bold mb-4">Админ-панель 👑</h1>
+      <h2 className="text-lg mb-3">Пользователи</h2>
 
-      <div className="mt-6 space-y-3">
-        <button className="bg-blue-600 hover:bg-blue-700 transition rounded-xl py-2 px-4 w-full">
-          Управление пользователями
-        </button>
-        <button className="bg-green-600 hover:bg-green-700 transition rounded-xl py-2 px-4 w-full">
-          Просмотр и модерация объектов
-        </button>
-        <button className="bg-gray-700 hover:bg-gray-800 transition rounded-xl py-2 px-4 w-full">
-          Настройки проекта
-        </button>
+      <div className="overflow-x-auto">
+        <table className="min-w-full border border-gray-700 text-sm">
+          <thead className="bg-gray-800">
+            <tr>
+              <th className="border border-gray-700 px-3 py-2">ID</th>
+              <th className="border border-gray-700 px-3 py-2">Имя</th>
+              <th className="border border-gray-700 px-3 py-2">Телефон</th>
+              <th className="border border-gray-700 px-3 py-2">Роль</th>
+              <th className="border border-gray-700 px-3 py-2">Действие</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td className="border border-gray-700 px-3 py-2">{u.id}</td>
+                <td className="border border-gray-700 px-3 py-2">
+                  {u.firstName} {u.lastName}
+                </td>
+                <td className="border border-gray-700 px-3 py-2">{u.phone}</td>
+                <td className="border border-gray-700 px-3 py-2">{u.role}</td>
+                <td className="border border-gray-700 px-3 py-2">
+                  <select
+                    value={u.role || "user"}
+                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                    className="bg-neutral-800 text-white rounded px-2 py-1"
+                  >
+                    <option value="user">Пользователь</option>
+                    <option value="moderator">Модератор</option>
+                    <option value="admin">Админ</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
