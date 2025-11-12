@@ -5,10 +5,10 @@ import api from "../lib/api";
 
 export default function MainLayout() {
   const location = useLocation();
-  const [role, setRole] = useState<"user" | "moderator" | "admin">("user");
+  const [role, setRole] = useState<string>("user");
 
   useEffect(() => {
-    const loadRole = async () => {
+    const checkRole = async () => {
       try {
         const tgUser = WebApp.initDataUnsafe?.user;
         if (!tgUser) return;
@@ -16,11 +16,11 @@ export default function MainLayout() {
         const res = await api.get(`/user/${tgUser.id}`);
         setRole(res.data.role || "user");
       } catch (err) {
-        console.log("Ошибка загрузки роли:", err);
+        console.error("Ошибка проверки роли", err);
       }
     };
 
-    loadRole();
+    checkRole();
   }, []);
 
   const menuItems = [
@@ -28,7 +28,6 @@ export default function MainLayout() {
     { to: "/search", label: "🔎 Поиск" },
     { to: "/express", label: "⚡ Экспресс" },
     { to: "/profile", label: "👤 Профиль" },
-
     ...(role === "admin" || role === "moderator"
       ? [{ to: "/admin", label: "⚙️ Админ" }]
       : []),
@@ -36,7 +35,6 @@ export default function MainLayout() {
 
   return (
     <div className="flex flex-col min-h-screen bg-tgBg text-white">
-
       <main className="flex-1 p-4 overflow-y-auto">
         <Outlet />
       </main>
