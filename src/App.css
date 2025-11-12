@@ -5,6 +5,10 @@
   text-align: center;
 }
 
+body {
+  padding-bottom: 60px; /* чтобы контент не уходил под меню */
+}
+
 .logo {
   height: 6em;
   padding: 1.5em;

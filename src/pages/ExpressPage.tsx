@@ -1,47 +1,152 @@
 import { useState } from "react";
 
 export default function ExpressPage() {
-  const [rooms, setRooms] = useState<number>(1);
-  const [budget, setBudget] = useState<number>(6000000);
-  const [district, setDistrict] = useState("");
+  const [form, setForm] = useState({
+    query: "",
+    rooms: "",
+    priceFrom: "",
+    priceTo: "",
+    areaFrom: "",
+    areaTo: "",
+    kitchenFrom: "",
+    kitchenTo: "",
+    renovation: "",
+  });
 
-  const submit = () => {
-    alert(`Экспресс-подборка отправлена:
-Комнат: ${rooms}
-Бюджет: ${budget.toLocaleString("ru-RU")} ₽
-Район: ${district || "не указан"}`);
-    // тут вызов POST /express-request
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Преобразуем данные под "экспресс-подборку"
+    const expandedForm = {
+      ...form,
+      priceTo: form.priceTo ? Math.round(Number(form.priceTo) * 1.1).toString() : "",
+      areaTo: form.areaTo ? Math.round(Number(form.areaTo) * 1.1).toString() : "",
+    };
+
+    console.log("Экспресс-подборка:", expandedForm);
+
+    // TODO: API-запрос:
+    // axios.get(`/api/express`, { params: expandedForm })
   };
 
   return (
-    <div className="rounded-2xl bg-card p-4 border border-white/5 shadow-soft max-w-xl">
-      <div className="text-lg font-semibold mb-3">Экспресс-подборка</div>
-      <div className="grid gap-3">
-        <label className="grid gap-1">
-          <span className="text-sm text-white/70">Комнат</span>
-          <input type="number" value={rooms} min={0} max={5}
-                 onChange={(e) => setRooms(parseInt(e.target.value || "0"))}
-                 className="bg-white/5 rounded-xl px-3 py-2 outline-none"/>
-        </label>
+    <div className="flex flex-col gap-4 text-white p-4">
+      <h1 className="text-2xl font-bold">⚡ Экспресс-подборка</h1>
+      <p className="text-gray-400 text-sm mb-2">
+        Мы подберём варианты на 10% дороже, с большей площадью или улучшенным ремонтом.
+      </p>
 
-        <label className="grid gap-1">
-          <span className="text-sm text-white/70">Бюджет, ₽</span>
-          <input type="number" value={budget}
-                 onChange={(e) => setBudget(parseInt(e.target.value || "0"))}
-                 className="bg-white/5 rounded-xl px-3 py-2 outline-none"/>
-        </label>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        {/* Район / улица / ЖК */}
+        <input
+          type="text"
+          name="query"
+          value={form.query}
+          onChange={handleChange}
+          placeholder="Район, улица или ЖК"
+          className="p-3 rounded-xl bg-gray-800 text-white placeholder-gray-400 border border-gray-700"
+        />
 
-        <label className="grid gap-1">
-          <span className="text-sm text-white/70">Район</span>
-          <input value={district} onChange={(e) => setDistrict(e.target.value)}
-                 className="bg-white/5 rounded-xl px-3 py-2 outline-none" placeholder="Центральный / Фестивальный…"/>
-        </label>
+        {/* Кол-во комнат */}
+        <select
+          name="rooms"
+          value={form.rooms}
+          onChange={handleChange}
+          className="p-3 rounded-xl bg-gray-800 text-white border border-gray-700"
+        >
+          <option value="">Количество комнат</option>
+          <option value="studio">Студия</option>
+          <option value="1">1-комнатная</option>
+          <option value="2">2-комнатная</option>
+          <option value="3">3-комнатная</option>
+        </select>
 
-        <button onClick={submit}
-                className="mt-2 rounded-xl bg-accent2 text-white px-4 py-2 font-semibold hover:bg-emerald-500/90">
-          Отправить
+        {/* Цена */}
+        <div className="flex gap-2">
+          <input
+            type="number"
+            name="priceFrom"
+            value={form.priceFrom}
+            onChange={handleChange}
+            placeholder="Цена от"
+            className="flex-1 p-3 rounded-xl bg-gray-800 border border-gray-700"
+          />
+          <input
+            type="number"
+            name="priceTo"
+            value={form.priceTo}
+            onChange={handleChange}
+            placeholder="до"
+            className="flex-1 p-3 rounded-xl bg-gray-800 border border-gray-700"
+          />
+        </div>
+
+        {/* Площадь */}
+        <div className="flex gap-2">
+          <input
+            type="number"
+            name="areaFrom"
+            value={form.areaFrom}
+            onChange={handleChange}
+            placeholder="Площадь от"
+            className="flex-1 p-3 rounded-xl bg-gray-800 border border-gray-700"
+          />
+          <input
+            type="number"
+            name="areaTo"
+            value={form.areaTo}
+            onChange={handleChange}
+            placeholder="до"
+            className="flex-1 p-3 rounded-xl bg-gray-800 border border-gray-700"
+          />
+        </div>
+
+        {/* Площадь кухни */}
+        <div className="flex gap-2">
+          <input
+            type="number"
+            name="kitchenFrom"
+            value={form.kitchenFrom}
+            onChange={handleChange}
+            placeholder="Кухня от"
+            className="flex-1 p-3 rounded-xl bg-gray-800 border border-gray-700"
+          />
+          <input
+            type="number"
+            name="kitchenTo"
+            value={form.kitchenTo}
+            onChange={handleChange}
+            placeholder="до"
+            className="flex-1 p-3 rounded-xl bg-gray-800 border border-gray-700"
+          />
+        </div>
+
+        {/* Ремонт */}
+        <select
+          name="renovation"
+          value={form.renovation}
+          onChange={handleChange}
+          className="p-3 rounded-xl bg-gray-800 text-white border border-gray-700"
+        >
+          <option value="">Тип ремонта</option>
+          <option value="черновой">Черновой</option>
+          <option value="предчистовой">Предчистовой</option>
+          <option value="ремонт">С ремонтом</option>
+          <option value="дизайнерский">Дизайнерский</option>
+        </select>
+
+        <button
+          type="submit"
+          className="mt-2 p-3 bg-emerald-600 rounded-xl text-white font-semibold hover:bg-emerald-700 transition"
+        >
+          Подобрать варианты
         </button>
-      </div>
+      </form>
     </div>
   );
 }

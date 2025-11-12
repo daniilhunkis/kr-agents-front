@@ -1,30 +1,27 @@
-import { Outlet, Link, useLocation } from "react-router-dom";
+import { Outlet } from "react-router-dom";
+import MenuBar from "./MenuBar";
+import { useEffect } from "react";
 
 export default function Layout() {
-  const { pathname } = useLocation();
+  useEffect(() => {
+    // Настройка Telegram WebApp темы (если открыт внутри Telegram)
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg) {
+      tg.expand(); // разворачиваем на весь экран
+      tg.setBackgroundColor("#0f0f0f");
+      tg.setHeaderColor("#0f0f0f");
+    }
+  }, []);
 
   return (
-    <div className="min-h-screen bg-tgBg text-white flex flex-col">
-      {/* Контент */}
-      <div className="flex-1 p-4">
+    <div className="min-h-screen flex flex-col bg-[#0f0f0f] text-white">
+      {/* Основной контент */}
+      <main className="flex-grow overflow-y-auto px-4 pb-[80px]">
         <Outlet />
-      </div>
+      </main>
 
       {/* Нижнее меню */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-gray-800 flex justify-around py-2 text-sm">
-        <Link to="/" className={pathname === "/" ? "text-accent" : "text-gray-400"}>
-          🏠 Главная
-        </Link>
-        <Link to="/search" className={pathname === "/search" ? "text-accent" : "text-gray-400"}>
-          🔍 Поиск
-        </Link>
-        <Link to="/express" className={pathname === "/express" ? "text-accent" : "text-gray-400"}>
-          ⚡ Подбор
-        </Link>
-        <Link to="/profile" className={pathname === "/profile" ? "text-accent" : "text-gray-400"}>
-          👤 Профиль
-        </Link>
-      </nav>
+      <MenuBar />
     </div>
   );
 }
