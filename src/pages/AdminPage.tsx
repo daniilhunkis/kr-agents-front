@@ -1,6 +1,11 @@
 // src/pages/AdminPage.tsx
 import React, { useEffect, useState } from "react";
-import { getAllUsers, updateUserRole, UserDto } from "../lib/api";
+
+// функции
+import { getAllUsers, updateUserRole } from "../lib/api";
+
+// типы должны импортироваться только как type
+import type { UserDto } from "../lib/api";
 
 const ADMIN_ID = 776430926; // твой Telegram ID
 const ADMIN_PASSWORD = "krd2025";
@@ -49,7 +54,7 @@ export default function AdminPage() {
     }
   };
 
-  // --- форма входа по паролю — всегда при заходе на /admin ---
+  // --- форма входа по паролю ---
   if (!authorized) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
