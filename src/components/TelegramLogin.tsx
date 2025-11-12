@@ -1,96 +1,117 @@
-import { useEffect, useState } from "react";
-import api from "../lib/api";
-
-interface TelegramUser {
-  id: number;
-  first_name: string;
-  last_name?: string;
-  username?: string;
-}
+import React, { useEffect, useState } from "react";
+import WebApp from "@twa-dev/sdk";
+import axios from "axios";
 
 export default function TelegramLogin() {
-  const [user, setUser] = useState<TelegramUser | null>(null);
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    phone: "",
-  });
-  const [isRegistered, setIsRegistered] = useState(false);
+  const [isNew, setIsNew] = useState<boolean | null>(null);
+  const [name, setName] = useState("");
+  const [surname, setSurname] = useState("");
+  const [phone, setPhone] = useState("");
+
+  const API_BASE = import.meta.env.VITE_API_URL || "https://api.krd-agents.ru/api";
 
   useEffect(() => {
-    // Получаем данные Telegram WebApp
-    const tg = (window as any).Telegram?.WebApp;
-    if (!tg) return;
+    const init = async () => {
+      try {
+        const tgUser = WebApp.initDataUnsafe?.user;
+        if (!tgUser) {
+          console.warn("Пользователь Telegram не найден в initDataUnsafe");
+          return;
+        }
 
-    tg.ready();
-    const initDataUnsafe = tg.initDataUnsafe;
-    if (initDataUnsafe?.user) {
-      const tgUser = initDataUnsafe.user;
-      setUser(tgUser);
+        // авто-заполнение из Telegram
+        setName(tgUser.first_name || "");
+        setSurname(tgUser.last_name || "");
 
-      // Проверяем, зарегистрирован ли пользователь
-      api
-        .get(`/user/${tgUser.id}`)
-        .then(() => setIsRegistered(true))
-        .catch(() => setIsRegistered(false));
-    }
+        const userId = tgUser.id;
+        const check = await axios.get(`${API_BASE}/user/${userId}`);
+
+        if (check.status === 200) {
+          setIsNew(false);
+        }
+      } catch (err: any) {
+        if (err.response?.status === 404) {
+          // новый пользователь
+          setIsNew(true);
+        } else {
+          console.error("Ошибка при проверке пользователя", err);
+        }
+      }
+    };
+
+    init();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
     try {
-      await api.post("/register", {
-        id: user.id,
-        firstName: form.firstName,
-        lastName: form.lastName,
-        phone: form.phone,
+      const tgUser = WebApp.initDataUnsafe?.user;
+      if (!tgUser) return;
+
+      await axios.post(`${API_BASE}/register`, {
+        id: tgUser.id,
+        firstName: name,
+        lastName: surname,
+        phone,
       });
-      setIsRegistered(true);
-      alert("✅ Регистрация успешна!");
-    } catch (error) {
-      alert("Ошибка регистрации");
+
+      WebApp.showAlert("Регистрация успешно завершена!");
+      setIsNew(false);
+    } catch (err) {
+      console.error("Ошибка при регистрации", err);
+      WebApp.showAlert("Ошибка при регистрации. Попробуйте позже.");
     }
   };
 
-  if (isRegistered || !user) return null;
+  if (isNew === null) return null; // не показываем ничего, пока идёт проверка
+
+  if (!isNew) return null; // пользователь уже зарегистрирован, форма не нужна
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white text-black rounded-2xl p-6 w-80 shadow-xl">
-        <h2 className="text-xl font-bold mb-4 text-center">
-          Добро пожаловать!
-        </h2>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <input
-            className="p-2 border rounded-md"
-            placeholder="Имя"
-            value={form.firstName}
-            onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-            required
-          />
-          <input
-            className="p-2 border rounded-md"
-            placeholder="Фамилия"
-            value={form.lastName}
-            onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-          />
-          <input
-            className="p-2 border rounded-md"
-            placeholder="Телефон"
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            required
-          />
-          <button
-            type="submit"
-            className="bg-blue-600 text-white rounded-md py-2 mt-2 hover:bg-blue-700 transition"
-          >
-            Зарегистрироваться
-          </button>
-        </form>
-      </div>
+    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-neutral-900 w-full max-w-md p-6 rounded-2xl shadow-lg flex flex-col gap-4"
+      >
+        <h1 className="text-2xl font-bold text-white text-center mb-2">
+          Добро пожаловать 👋
+        </h1>
+        <p className="text-gray-400 text-center mb-4">
+          Укажи данные, чтобы продолжить
+        </p>
+
+        <input
+          type="text"
+          placeholder="Имя"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="p-3 rounded-xl bg-neutral-800 text-white focus:outline-none"
+          required
+        />
+        <input
+          type="text"
+          placeholder="Фамилия"
+          value={surname}
+          onChange={(e) => setSurname(e.target.value)}
+          className="p-3 rounded-xl bg-neutral-800 text-white focus:outline-none"
+          required
+        />
+        <input
+          type="tel"
+          placeholder="Телефон"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          className="p-3 rounded-xl bg-neutral-800 text-white focus:outline-none"
+          required
+        />
+
+        <button
+          type="submit"
+          className="bg-emerald-500 text-white font-semibold py-3 rounded-xl hover:bg-emerald-600 transition"
+        >
+          Продолжить
+        </button>
+      </form>
     </div>
   );
 }
