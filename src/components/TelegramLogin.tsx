@@ -1,42 +1,35 @@
-// src/components/TelegramLogin.tsx
 import React, { useEffect, useState } from "react";
 import WebApp from "@twa-dev/sdk";
-import { getUser, registerUser } from "../lib/api";
+import axios from "axios";
 
 export default function TelegramLogin() {
   const [isNew, setIsNew] = useState<boolean | null>(null);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [name, setName] = useState("");
+  const [surname, setSurname] = useState("");
   const [phone, setPhone] = useState("");
+
+  const API_BASE = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
     const init = async () => {
       try {
         const tgUser = WebApp.initDataUnsafe?.user;
-        if (!tgUser) {
-          console.warn("Нет данных Telegram WebApp user");
-          setIsNew(null);
-          return;
-        }
+        if (!tgUser) return;
 
         const userId = tgUser.id;
-        try {
-          const user = await getUser(userId);
-          console.log("Найден пользователь:", user);
+
+        const check = await axios.get(`${API_BASE}/api/user/${userId}`);
+
+        if (check.status === 200) {
           setIsNew(false);
           window.location.href = "/";
-        } catch (err: any) {
-          if (err?.response?.status === 404) {
-            console.log("Новый пользователь, показываем форму");
-            setIsNew(true);
-          } else {
-            console.error("Ошибка при проверке пользователя", err);
-            setIsNew(true);
-          }
         }
-      } catch (e) {
-        console.error("Ошибка init TelegramLogin", e);
-        setIsNew(true);
+      } catch (err: any) {
+        if (err.response?.status === 404) {
+          setIsNew(true);
+        } else {
+          console.error("Ошибка при проверке пользователя", err);
+        }
       }
     };
 
@@ -45,17 +38,14 @@ export default function TelegramLogin() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const tgUser = WebApp.initDataUnsafe?.user;
-    if (!tgUser) {
-      WebApp.showAlert("Не удалось получить данные Telegram. Откройте мини-приложение заново.");
-      return;
-    }
-
     try {
-      await registerUser({
+      const tgUser = WebApp.initDataUnsafe?.user;
+      if (!tgUser) return;
+
+      await axios.post(`${API_BASE}/api/register`, {
         id: tgUser.id,
-        firstName,
-        lastName,
+        firstName: name,
+        lastName: surname,
         phone,
       });
 
@@ -67,22 +57,19 @@ export default function TelegramLogin() {
     }
   };
 
-  if (isNew === null) {
+  if (isNew === null)
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white text-lg">
         Загрузка...
       </div>
     );
-  }
 
-  if (!isNew) {
-    // Теоретически мы сюда почти не попадём, т.к. сразу редиректим
+  if (!isNew)
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white text-lg">
         Добро пожаловать!
       </div>
     );
-  }
 
   return (
     <div className="flex items-center justify-center h-screen bg-black px-6">
@@ -100,17 +87,18 @@ export default function TelegramLogin() {
         <input
           type="text"
           placeholder="Имя"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           className="p-3 rounded-xl bg-neutral-800 text-white focus:outline-none"
           required
         />
         <input
           type="text"
           placeholder="Фамилия"
-          value={lastName}
-          onChange={(e) => setLastName(e.target.value)}
+          value={surname}
+          onChange={(e) => setSurname(e.target.value)}
           className="p-3 rounded-xl bg-neutral-800 text-white focus:outline-none"
+          required
         />
         <input
           type="tel"
@@ -123,7 +111,7 @@ export default function TelegramLogin() {
 
         <button
           type="submit"
-          className="bg-emerald-500 text-white font-semibold py-3 rounded-xl hover:bg-emerald-400 transition"
+          className="bg-accent text-white font-semibold py-3 rounded-xl hover:bg-accent/90 transition"
         >
           Продолжить
         </button>
