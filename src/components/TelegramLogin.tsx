@@ -8,7 +8,7 @@ export default function TelegramLogin() {
   const [surname, setSurname] = useState("");
   const [phone, setPhone] = useState("");
 
-  const API_BASE = import.meta.env.VITE_API_URL || "https://api.krd-agents.ru/api";
+  const API_BASE = import.meta.env.VITE_API_URL || "https://api.krd-agents.ru";
 
   useEffect(() => {
     const init = async () => {
