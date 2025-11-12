@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "https://api.krd-agents.ru/api",
+  baseURL: import.meta.env.VITE_API_URL || "https://api.krd-agents.ru",
 });
 
 export const createObject = (data: FormData) =>
