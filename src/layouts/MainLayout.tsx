@@ -7,6 +7,13 @@ export default function MainLayout() {
   const location = useLocation();
   const [role, setRole] = useState<string>("user");
 
+  const [debug, setDebug] = useState<any>({
+    tgId: null,
+    apiUrl: "",
+    response: null,
+    error: null,
+  });
+
   const API_BASE = import.meta.env.VITE_API_URL || "https://api.krd-agents.ru";
 
   useEffect(() => {
@@ -15,19 +22,29 @@ export default function MainLayout() {
         const tgUser = WebApp.initDataUnsafe?.user;
 
         if (!tgUser) {
-          console.log("Нет данных Telegram");
+          setDebug((d: any) => ({ ...d, error: "Нет данных Telegram" }));
           return;
         }
 
-        console.log("TG user ID:", tgUser.id);
+        const id = tgUser.id;
 
-        const res = await axios.get(`${API_BASE}/api/user/${tgUser.id}`);
+        const url = `${API_BASE}/api/user/${id}`;
 
-        console.log("Ответ API:", res.data);
+        setDebug((d: any) => ({ ...d, tgId: id, apiUrl: url }));
+
+        const res = await axios.get(url);
+
+        setDebug((d: any) => ({
+          ...d,
+          response: res.data,
+        }));
 
         setRole(res.data.role || "user");
       } catch (err: any) {
-        console.error("Ошибка проверки роли", err);
+        setDebug((d: any) => ({
+          ...d,
+          error: err.message || "Ошибка API",
+        }));
       }
     };
 
@@ -68,6 +85,15 @@ export default function MainLayout() {
           </Link>
         ))}
       </nav>
+
+      {/* DIAGNOSTIC INFO */}
+      <div className="fixed bottom-0 left-0 w-full bg-black/70 text-xs p-2 text-yellow-400">
+        <div>TG ID: {debug.tgId || "нет"}</div>
+        <div>API URL: {debug.apiUrl}</div>
+        <div>Role: {role}</div>
+        <div>Response: {JSON.stringify(debug.response)}</div>
+        <div>Error: {debug.error}</div>
+      </div>
     </div>
   );
 }
