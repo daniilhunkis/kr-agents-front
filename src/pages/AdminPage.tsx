@@ -20,7 +20,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (authorized) {
-      api.get(`/users?admin_id=${MAIN_ADMIN}`)
+      api.get(`/api/users?admin_id=${MAIN_ADMIN}`)
         .then((res) => setUsers(res.data))
         .catch((err) => console.error(err));
     }
