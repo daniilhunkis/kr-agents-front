@@ -11,7 +11,7 @@ import AddObject from "./pages/AddObject";
 import MyObjectsPage from "./pages/MyObjectsPage";
 import UsersPage from "./pages/UsersPage";
 import Register from "./pages/Register";
-import TelegramLogin from "./pages/TelegramLogin";
+import TelegramLogin from "./components/TelegramLogin";
 
 export default function App() {
   return (
@@ -29,7 +29,6 @@ export default function App() {
           <Route path="/my-objects" element={<MyObjectsPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<TelegramLogin />} />
         </Route>
       </Routes>
     </Router>
