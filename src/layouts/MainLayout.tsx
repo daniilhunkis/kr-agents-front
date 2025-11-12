@@ -7,44 +7,23 @@ export default function MainLayout() {
   const location = useLocation();
   const [role, setRole] = useState<string>("user");
 
-  const [debug, setDebug] = useState<any>({
-    tgId: null,
-    apiUrl: "",
-    response: null,
-    error: null,
-  });
-
+  // Важно: тут НЕ должно быть "/api" на конце
   const API_BASE = import.meta.env.VITE_API_URL || "https://api.krd-agents.ru";
 
   useEffect(() => {
     const checkRole = async () => {
       try {
         const tgUser = WebApp.initDataUnsafe?.user;
+        if (!tgUser) return;
 
-        if (!tgUser) {
-          setDebug((d: any) => ({ ...d, error: "Нет данных Telegram" }));
-          return;
-        }
-
-        const id = tgUser.id;
-
-        const url = `${API_BASE}/api/user/${id}`;
-
-        setDebug((d: any) => ({ ...d, tgId: id, apiUrl: url }));
+        const url = `${API_BASE}/api/user/${tgUser.id}`;
 
         const res = await axios.get(url);
-
-        setDebug((d: any) => ({
-          ...d,
-          response: res.data,
-        }));
+        console.log("Роль пользователя:", res.data.role);
 
         setRole(res.data.role || "user");
-      } catch (err: any) {
-        setDebug((d: any) => ({
-          ...d,
-          error: err.message || "Ошибка API",
-        }));
+      } catch (err) {
+        console.error("Ошибка при проверке роли", err);
       }
     };
 
@@ -64,12 +43,10 @@ export default function MainLayout() {
 
   return (
     <div className="flex flex-col min-h-screen bg-tgBg text-white">
-      {/* Контент */}
       <main className="flex-1 p-4 overflow-y-auto">
         <Outlet />
       </main>
 
-      {/* Нижнее меню */}
       <nav className="flex justify-around bg-gray-800/80 py-3 border-t border-gray-700 backdrop-blur-md">
         {menuItems.map((item) => (
           <Link
@@ -85,15 +62,6 @@ export default function MainLayout() {
           </Link>
         ))}
       </nav>
-
-      {/* DIAGNOSTIC INFO */}
-      <div className="fixed bottom-0 left-0 w-full bg-black/70 text-xs p-2 text-yellow-400">
-        <div>TG ID: {debug.tgId || "нет"}</div>
-        <div>API URL: {debug.apiUrl}</div>
-        <div>Role: {role}</div>
-        <div>Response: {JSON.stringify(debug.response)}</div>
-        <div>Error: {debug.error}</div>
-      </div>
     </div>
   );
 }
