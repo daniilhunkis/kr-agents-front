@@ -20,7 +20,7 @@ export default function TelegramLogin() {
         }
 
         const userId = tgUser.id;
-        const check = await axios.get(`${API_BASE}/user/${userId}`);
+        const check = await axios.get(`${API_BASE}/api/user/${userId}`);
 
         if (check.status === 200) {
           setIsNew(false);
