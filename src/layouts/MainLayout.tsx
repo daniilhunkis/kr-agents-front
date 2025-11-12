@@ -8,7 +8,7 @@ export default function MainLayout() {
   const [role, setRole] = useState<string>("user");
 
   // Важно: тут НЕ должно быть "/api" на конце
-  const API_BASE = import.meta.env.VITE_API_URL || "https://api.krd-agents.ru";
+  const API_BASE = import.meta.env.VITE_API_URL; // https://api.krd-agents.ru
 
   useEffect(() => {
     const checkRole = async () => {
@@ -16,14 +16,10 @@ export default function MainLayout() {
         const tgUser = WebApp.initDataUnsafe?.user;
         if (!tgUser) return;
 
-        const url = `${API_BASE}/api/user/${tgUser.id}`;
-
-        const res = await axios.get(url);
-        console.log("Роль пользователя:", res.data.role);
-
+        const res = await axios.get(`${API_BASE}/api/user/${tgUser.id}`);
         setRole(res.data.role || "user");
       } catch (err) {
-        console.error("Ошибка при проверке роли", err);
+        console.error("Ошибка проверки роли", err);
       }
     };
 

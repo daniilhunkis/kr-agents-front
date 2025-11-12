@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import api from "../lib/api";
+import axios from "axios";
 
 export default function AdminPage() {
   const [authorized, setAuthorized] = useState(false);
@@ -7,7 +7,8 @@ export default function AdminPage() {
   const [users, setUsers] = useState<any[]>([]);
 
   const correctPassword = "krd2025";
-  const MAIN_ADMIN = 776430926;
+  const API_BASE = import.meta.env.VITE_API_URL; // https://api.krd-agents.ru
+  const MAIN_ADMIN_ID = 776430926; // твой Telegram ID 👑
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,27 +21,32 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (authorized) {
-      api.get(`/users?admin_id=${MAIN_ADMIN}`)
+      axios
+        .get(`${API_BASE}/api/users?admin_id=${MAIN_ADMIN_ID}`)
         .then((res) => setUsers(res.data))
-        .catch((err) => console.error(err));
+        .catch((err) => console.error("Ошибка загрузки пользователей:", err));
     }
   }, [authorized]);
 
   const handleRoleChange = async (id: number, role: string) => {
     try {
-      await api.patch(`/users/${id}/role`, {
+      await axios.patch(`${API_BASE}/api/users/${id}/role`, {
         role,
-        admin_id: MAIN_ADMIN,
+        admin_id: MAIN_ADMIN_ID,
       });
-      alert("Роль обновлена");
+
+      alert("Роль успешно обновлена");
+
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, role } : u))
       );
     } catch (err) {
-      alert("Ошибка");
+      alert("Ошибка при обновлении роли");
+      console.error(err);
     }
   };
 
+  // --- Авторизация ---
   if (!authorized) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
@@ -51,6 +57,7 @@ export default function AdminPage() {
           <h2 className="text-xl font-semibold text-center mb-2">
             🔒 Вход в админку
           </h2>
+
           <input
             type="password"
             value={password}
@@ -59,6 +66,7 @@ export default function AdminPage() {
             className="p-3 rounded-xl bg-neutral-800 text-white focus:outline-none text-center"
             required
           />
+
           <button
             type="submit"
             className="bg-emerald-600 hover:bg-emerald-700 transition rounded-xl py-2 font-semibold"
@@ -70,10 +78,10 @@ export default function AdminPage() {
     );
   }
 
+  // --- Админ-панель ---
   return (
     <div className="p-4 text-white bg-black min-h-screen">
       <h1 className="text-2xl font-bold mb-4">Админ-панель 👑</h1>
-
       <h2 className="text-lg mb-3">Пользователи</h2>
 
       <div className="overflow-x-auto">
@@ -87,19 +95,26 @@ export default function AdminPage() {
               <th className="border border-gray-700 px-3 py-2">Действие</th>
             </tr>
           </thead>
+
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
                 <td className="border border-gray-700 px-3 py-2">{u.id}</td>
+
                 <td className="border border-gray-700 px-3 py-2">
                   {u.firstName} {u.lastName}
                 </td>
+
                 <td className="border border-gray-700 px-3 py-2">{u.phone}</td>
+
                 <td className="border border-gray-700 px-3 py-2">{u.role}</td>
+
                 <td className="border border-gray-700 px-3 py-2">
                   <select
                     value={u.role || "user"}
-                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                    onChange={(e) =>
+                      handleRoleChange(u.id, e.target.value)
+                    }
                     className="bg-neutral-800 text-white rounded px-2 py-1"
                   >
                     <option value="user">Пользователь</option>
