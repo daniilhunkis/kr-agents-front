@@ -19,10 +19,6 @@ export default function TelegramLogin() {
           return;
         }
 
-        // авто-заполнение из Telegram
-        setName(tgUser.first_name || "");
-        setSurname(tgUser.last_name || "");
-
         const userId = tgUser.id;
         const check = await axios.get(`${API_BASE}/user/${userId}`);
 
@@ -63,9 +59,9 @@ export default function TelegramLogin() {
     }
   };
 
-  if (isNew === null) return null; // не показываем ничего, пока идёт проверка
+  if (isNew === null) return null; // пока идёт проверка
 
-  if (!isNew) return null; // пользователь уже зарегистрирован, форма не нужна
+  if (!isNew) return null; // уже зарегистрирован — форму не показываем
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center">
@@ -77,7 +73,7 @@ export default function TelegramLogin() {
           Добро пожаловать 👋
         </h1>
         <p className="text-gray-400 text-center mb-4">
-          Укажи данные, чтобы продолжить
+          Укажи свои данные, чтобы продолжить
         </p>
 
         <input
