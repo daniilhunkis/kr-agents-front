@@ -42,6 +42,17 @@ export interface ObjectDto {
 
 // ====== USERS ======
 
+export type Role = "user" | "moderator" | "admin";
+
+export interface UserDto {
+  id: number;
+  firstName: string;
+  lastName?: string;
+  phone?: string;
+  role?: Role;
+  moderatorPassword?: string; // <-- добавили
+}
+
 export async function getUser(userId: number) {
   const res = await api.get<UserDto>(`/user/${userId}`);
   return res.data;
@@ -64,24 +75,17 @@ export async function getAllUsers(adminId: number) {
   return res.data;
 }
 
-/**
- * Обновление роли пользователя.
- * Если роль = "moderator" и передан moderatorPassword — бэк должен сохранить этот пароль.
- */
 export async function updateUserRole(
   userId: number,
-  role: UserRole,
-  adminId: number,
-  moderatorPassword?: string
+  role: Role,
+  adminId: number
 ) {
-  const body: any = { role, admin_id: adminId };
-  if (moderatorPassword) {
-    body.moderatorPassword = moderatorPassword;
-  }
-
   const res = await api.patch<{ status: string; user: UserDto }>(
     `/users/${userId}/role`,
-    body
+    {
+      role,
+      admin_id: adminId,
+    }
   );
   return res.data;
 }
@@ -92,20 +96,16 @@ export async function updateUserRole(
  * Смена пароля модератора самим модератором.
  * oldPassword может быть пустым, если пароль ещё не был задан.
  */
-export async function changeModeratorPassword(
-  userId: number,
-  oldPassword: string,
-  newPassword: string
-) {
-  const res = await api.post<{ status: string; user: UserDto }>(
-    `/moderator/${userId}/password/change`,
-    {
-      oldPassword,
-      newPassword,
-    }
-  );
-  return res.data;
-}
+ export async function changeModeratorPassword(
+   userId: number,
+   payload: { oldPassword?: string; newPassword: string; adminId?: number }
+ ) {
+   const res = await api.post<{ status: string; user: UserDto }>(
+     `/moderator/${userId}/password/change`,
+     payload
+   );
+   return res.data;
+ }
 
 /**
  * Получить список объектов, которые ждут модерации.
