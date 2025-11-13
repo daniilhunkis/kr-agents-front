@@ -1,32 +1,44 @@
+// src/lib/api.ts
 import axios from "axios";
 
+const API_BASE = import.meta.env.VITE_API_URL || "https://api.krd-agents.ru";
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL, // у тебя: https://api.krd-agents.ru
+  baseURL: API_BASE,
 });
 
-// --- Тип пользователя ---
-export type UserDto = {
+// ====== USERS ======
+
+export interface UserDto {
   id: number;
   firstName: string;
   lastName?: string;
   phone?: string;
   role?: "user" | "moderator" | "admin";
-  moderatorPassword?: string | null;
-};
-
-// --- Пользователь по ID ---
-export async function getUser(userId: number) {
-  const res = await api.get<UserDto>(`/api/user/${userId}`);
-  return res.data;
+  moderatorPassword?: string; // ⭐ добавили
 }
 
-// --- Проверка роли для меню / админки ---
+// --- Проверка роли (админ/модер/юзер)
 export async function checkAdminRole(userId: number) {
   const res = await api.get<{ role: string }>(`/api/admin/check/${userId}`);
   return res.data;
 }
 
-// --- Все пользователи (только главный админ) ---
+export async function getUser(userId: number) {
+  const res = await api.get<UserDto>(`/api/user/${userId}`);
+  return res.data;
+}
+
+export async function registerUser(data: UserDto) {
+  const res = await api.post<{ status: string; user: UserDto }>(
+    "/api/register",
+    data
+  );
+  return res.data;
+}
+
+// ====== ADMIN ======
+
 export async function getAllUsers(adminId: number) {
   const res = await api.get<UserDto[]>("/api/users", {
     params: { admin_id: adminId },
@@ -34,51 +46,64 @@ export async function getAllUsers(adminId: number) {
   return res.data;
 }
 
-// --- Обновление роли (только главный админ) ---
+// — обновление роли
 export async function updateUserRole(
   userId: number,
   role: "user" | "moderator" | "admin",
   adminId: number
 ) {
-  const res = await api.patch(`/api/users/${userId}/role`, {
-    role,
-    admin_id: adminId,
-  });
+  const res = await api.patch<{ status: string; user: UserDto }>(
+    `/api/users/${userId}/role`,
+    {
+      role,
+      admin_id: adminId,
+    }
+  );
   return res.data;
 }
 
-// --- Установка пароля модератора (админ) ---
+// — установить пароль модератору
 export async function setModeratorPassword(
   userId: number,
   password: string,
   adminId: number
 ) {
-  const res = await api.post("/api/moderator/set-password", {
-    user_id: userId,
-    password,
-    admin_id: adminId,
-  });
+  const res = await api.patch<{ status: string; user: UserDto }>(
+    `/api/moderator/password/set`,
+    {
+      userId,
+      password,
+      admin_id: adminId,
+    }
+  );
   return res.data;
 }
 
-// --- Смена пароля модератором ---
+// ====== MODERATOR ======
+
 export async function changeModeratorPassword(
   userId: number,
   oldPassword: string,
   newPassword: string
 ) {
-  const res = await api.post("/api/moderator/change-password", {
-    user_id: userId,
-    oldPassword,
-    newPassword,
-  });
+  const res = await api.patch<{ status: string; user: UserDto }>(
+    `/api/moderator/password/change`,
+    {
+      userId,
+      oldPassword,
+      newPassword,
+    }
+  );
   return res.data;
 }
 
-// --- Уже существующая функция создания объекта ---
-export const createObject = (data: FormData) =>
-  api.post("/api/objects", data, {
+// ====== OBJECTS ======
+
+export async function createObject(formData: FormData) {
+  const res = await api.post("/api/objects", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+  return res.data;
+}
 
 export default api;
