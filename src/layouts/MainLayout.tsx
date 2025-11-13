@@ -5,52 +5,66 @@ import { getUser } from "../lib/api";
 
 export default function MainLayout() {
   const location = useLocation();
-  const [role, setRole] = useState("user");
+  const [role, setRole] = useState<"user" | "moderator" | "admin">("user");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
-      const tgUser = WebApp.initDataUnsafe?.user;
-      if (!tgUser) return;
-
+    const init = async () => {
       try {
-        const data = await getUser(tgUser.id);
-        setRole(data.role || "user");
-      } catch {
-        setRole("user");
+        const tgUser = WebApp.initDataUnsafe?.user;
+        if (!tgUser) return;
+
+        const user = await getUser(tgUser.id);
+        setRole((user.role as any) || "user");
+      } catch (err) {
+        console.error("Ошибка получения роли", err);
+      } finally {
+        setLoading(false);
       }
     };
 
-    load();
+    init();
   }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-black text-white">
+        Загрузка...
+      </div>
+    );
+  }
 
   const menuItems = [
     { to: "/", label: "🏠 Главная" },
     { to: "/search", label: "🔎 Поиск" },
     { to: "/express", label: "⚡ Экспресс" },
-    { to: "/profile", label: "👤 Профиль" },
-    ...(role === "admin"
-      ? [{ to: "/admin", label: "⚙️ Админ" }]
-      : role === "moderator"
+    { to: "/my-objects", label: "📄 Мои объекты" },
+    ...(role === "admin" || role === "moderator"
       ? [{ to: "/moderator", label: "🛠 Модерация" }]
+      : []),
+    ...(role === "admin"
+      ? [{ to: "/admin", label: "👑 Админка" }]
       : []),
   ];
 
   return (
     <div className="flex flex-col min-h-screen bg-tgBg text-white">
+      {/* Контент */}
       <main className="flex-1 p-4 overflow-y-auto">
         <Outlet />
       </main>
 
+      {/* Нижнее меню */}
       <nav className="flex justify-around bg-gray-800/80 py-3 border-t border-gray-700 backdrop-blur-md">
         {menuItems.map((item) => (
           <Link
             key={item.to}
             to={item.to}
-            className={
+            className={`text-sm ${
               location.pathname === item.to
                 ? "text-emerald-400 font-semibold"
                 : "text-gray-300"
-            }
+            }`}
           >
             {item.label}
           </Link>

@@ -25,7 +25,7 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/showings" element={<ShowsPage />} />
           <Route path="/admin" element={<AdminPage />} />
-          <Route path="/moderation" element={<ModeratorPage />} />
+          <Route path="/moderator" element={<ModeratorPage />} />
           <Route path="/add-object" element={<AddObject />} />
           <Route path="/my-objects" element={<MyObjectsPage />} />
           <Route path="/users" element={<UsersPage />} />

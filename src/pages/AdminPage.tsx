@@ -1,116 +1,95 @@
-// src/pages/AdminPage.tsx
 import React, { useEffect, useState } from "react";
-import type { UserDto } from "../lib/api";
+
 import {
   getAllUsers,
   updateUserRole,
-  setModeratorPassword,
+  changeModeratorPassword,
 } from "../lib/api";
 
-const ADMIN_ID = 776430926; // твой Telegram ID
-const ADMIN_PASSWORD = "krd2025"; // пароль для входа в админку
+import type { UserDto } from "../lib/api"; // ← ОБЯЗАТЕЛЬНО ТОЛЬКО ТАК!
 
 export default function AdminPage() {
   const [authorized, setAuthorized] = useState(false);
   const [password, setPassword] = useState("");
   const [users, setUsers] = useState<UserDto[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [modPasswords, setModPasswords] = useState<Record<number, string>>({});
+  const [newModeratorPasswords, setNewModeratorPasswords] = useState<Record<number, string>>({});
 
+  const correctPassword = "krd2025";
+  const ADMIN_ID = "776430926"; // строка!
+
+  // --- ВХОД В АДМИНКУ ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) {
+    if (password === correctPassword) {
       setAuthorized(true);
     } else {
       alert("Неверный пароль");
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const data = await getAllUsers(ADMIN_ID);
-      setUsers(data);
-    } catch (err) {
-      console.error("Ошибка загрузки пользователей", err);
-      alert("Не удалось загрузить список пользователей");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // --- ЗАГРУЗКА ЮЗЕРОВ ---
   useEffect(() => {
-    if (authorized) {
-      fetchUsers();
-    }
+    if (!authorized) return;
+
+    getAllUsers(Number(ADMIN_ID))
+      .then((list) => setUsers(list))
+      .catch((err) => console.error(err));
   }, [authorized]);
 
-  const handleRoleChange = async (id: number, role: string) => {
+  // --- НАЗНАЧЕНИЕ РОЛИ ---
+  const handleRoleChange = async (id: number, role: "user" | "moderator" | "admin") => {
     try {
-      await updateUserRole(id, role as "user" | "moderator" | "admin", ADMIN_ID);
+      await updateUserRole(id, role, Number(ADMIN_ID));
+
+      setUsers((prev) =>
+        prev.map((u) => (u.id === id ? { ...u, role } : u))
+      );
+
+      alert("Роль обновлена");
+    } catch {
+      alert("Ошибка при назначении роли");
+    }
+  };
+
+  // --- УСТАНОВКА ПАРОЛЯ МОДЕРАТОРА ---
+  const handleSetModeratorPassword = async (id: number) => {
+    const pwd = newModeratorPasswords[id];
+    if (!pwd) return alert("Введите пароль");
+
+    try {
+      await changeModeratorPassword(id, pwd, ADMIN_ID);
+
       setUsers((prev) =>
         prev.map((u) =>
-          u.id === id
-            ? {
-                ...u,
-                role: role as "user" | "moderator" | "admin",
-              }
-            : u
+          u.id === id ? { ...u, moderatorPassword: pwd } : u
         )
       );
-      // если роль больше не модератор — чистим пароль из локального стейта
-      if (role !== "moderator") {
-        setModPasswords((prev) => {
-          const copy = { ...prev };
-          delete copy[id];
-          return copy;
-        });
-      }
-      alert("Роль обновлена");
-    } catch (err) {
-      console.error("Ошибка при обновлении роли", err);
-      alert("Ошибка обновления роли");
+
+      alert("Пароль модератора установлен");
+    } catch {
+      alert("Ошибка при установке пароля");
     }
   };
 
-  const handleSetModeratorPassword = async (id: number) => {
-    const pwd = modPasswords[id];
-    if (!pwd || pwd.length !== 6) {
-      alert("Пароль модератора должен быть 6-значным кодом");
-      return;
-    }
-
-    try {
-      await setModeratorPassword(id, pwd, ADMIN_ID);
-      alert("Пароль модератора сохранён");
-    } catch (err) {
-      console.error("Ошибка установки пароля модератора", err);
-      alert("Не удалось сохранить пароль модератора");
-    }
-  };
-
+  // --- НЕ АВТОРИЗОВАН ---
   if (!authorized) {
     return (
-      <div className="flex items-center justify-center min-h-[70vh]">
+      <div className="flex items-center justify-center h-screen bg-black text-white">
         <form
           onSubmit={handleLogin}
-          className="bg-neutral-900 p-6 rounded-2xl shadow-lg w-full max-w-sm flex flex-col gap-4"
+          className="bg-neutral-900 p-6 rounded-xl w-full max-w-sm flex flex-col gap-4"
         >
-          <h2 className="text-xl font-semibold text-center mb-2">
-            🔒 Вход в админку
-          </h2>
+          <h2 className="text-xl font-semibold text-center">🔐 Вход в админку</h2>
+
           <input
             type="password"
+            placeholder="Пароль"
+            className="p-3 rounded-lg bg-neutral-800 text-white text-center"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Введите пароль администратора"
-            className="p-3 rounded-xl bg-neutral-800 text-white focus:outline-none text-center"
-            required
           />
-          <button
-            type="submit"
-            className="bg-emerald-600 hover:bg-emerald-700 transition rounded-xl py-2 font-semibold"
-          >
+
+          <button className="bg-emerald-600 hover:bg-emerald-700 p-3 rounded-lg">
             Войти
           </button>
         </form>
@@ -118,101 +97,79 @@ export default function AdminPage() {
     );
   }
 
+  // --- АДМИН-ПАНЕЛЬ ---
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Админ-панель 👑</h1>
-        <p className="text-sm text-gray-400">
-          Главный админ может назначать роли и задавать пароль модераторам.
-        </p>
-      </div>
+    <div className="p-4 bg-black min-h-screen text-white">
+      <h1 className="text-2xl font-bold mb-4">Админ-панель 👑</h1>
 
-      {loading ? (
-        <div className="text-gray-300">Загрузка пользователей…</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full border border-gray-700 text-sm">
-            <thead className="bg-gray-800">
-              <tr>
-                <th className="border border-gray-700 px-3 py-2">ID</th>
-                <th className="border border-gray-700 px-3 py-2">Имя</th>
-                <th className="border border-gray-700 px-3 py-2">Телефон</th>
-                <th className="border border-gray-700 px-3 py-2">Роль</th>
-                <th className="border border-gray-700 px-3 py-2">
-                  Пароль модератора
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td className="border border-gray-700 px-3 py-2">{u.id}</td>
-                  <td className="border border-gray-700 px-3 py-2">
-                    {u.firstName} {u.lastName}
-                  </td>
-                  <td className="border border-gray-700 px-3 py-2">
-                    {u.phone}
-                  </td>
-                  <td className="border border-gray-700 px-3 py-2">
-                    <select
-                      value={u.role || "user"}
+      <table className="w-full border border-gray-700 text-sm">
+        <thead className="bg-gray-800">
+          <tr>
+            <th className="border border-gray-700 p-2">ID</th>
+            <th className="border border-gray-700 p-2">Имя</th>
+            <th className="border border-gray-700 p-2">Телефон</th>
+            <th className="border border-gray-700 p-2">Роль</th>
+            <th className="border border-gray-700 p-2">Пароль модератора</th>
+            <th className="border border-gray-700 p-2">Действие</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {users.map((u) => (
+            <tr key={u.id}>
+              <td className="border border-gray-700 p-2">{u.id}</td>
+
+              <td className="border border-gray-700 p-2">
+                {u.firstName} {u.lastName}
+              </td>
+
+              <td className="border border-gray-700 p-2">{u.phone}</td>
+
+              <td className="border border-gray-700 p-2">
+                <select
+                  className="bg-neutral-800 p-1 rounded"
+                  value={u.role || "user"}
+                  onChange={(e) =>
+                    handleRoleChange(u.id, e.target.value as any)
+                  }
+                >
+                  <option value="user">Пользователь</option>
+                  <option value="moderator">Модератор</option>
+                  <option value="admin">Админ</option>
+                </select>
+              </td>
+
+              <td className="border border-gray-700 p-2">
+                {u.role === "moderator" && (
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      className="bg-neutral-800 p-1 rounded w-24"
+                      placeholder="пароль"
+                      value={newModeratorPasswords[u.id] || ""}
                       onChange={(e) =>
-                        handleRoleChange(u.id, e.target.value)
+                        setNewModeratorPasswords((prev) => ({
+                          ...prev,
+                          [u.id]: e.target.value,
+                        }))
                       }
-                      className="bg-neutral-800 text-white rounded px-2 py-1"
+                    />
+
+                    <button
+                      className="bg-emerald-700 px-2 rounded"
+                      onClick={() => handleSetModeratorPassword(u.id)}
                     >
-                      <option value="user">Пользователь</option>
-                      <option value="moderator">Модератор</option>
-                      <option value="admin">Админ</option>
-                    </select>
-                  </td>
-                  <td className="border border-gray-700 px-3 py-2">
-                    {u.role === "moderator" ? (
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={6}
-                          placeholder="6-значный код"
-                          value={modPasswords[u.id] ?? ""}
-                          onChange={(e) =>
-                            setModPasswords((prev) => ({
-                              ...prev,
-                              [u.id]: e.target.value.replace(/\D/g, "").slice(0, 6),
-                            }))
-                          }
-                          className="bg-neutral-800 text-white rounded px-2 py-1 w-full sm:w-32"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleSetModeratorPassword(u.id)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-xs sm:text-sm rounded px-2 py-1"
-                        >
-                          Сохранить
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-gray-500 text-xs">
-                        Доступно только для модераторов
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="border border-gray-700 px-3 py-4 text-center text-gray-400"
-                  >
-                    Пользователей пока нет
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      ✔
+                    </button>
+                  </div>
+                )}
+              </td>
+
+              <td className="border border-gray-700 p-2 text-center">—</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
