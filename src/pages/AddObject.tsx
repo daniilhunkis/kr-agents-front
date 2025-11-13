@@ -1,50 +1,101 @@
-// webapp/src/pages/AddObject.tsx
-import { useState } from "react";
-import { api, createObject } from "../lib/api";
+import React, { useState } from "react";
+import { api } from "../lib/api";
+import WebApp from "@twa-dev/sdk";
 
 export default function AddObject() {
-  const [form, setForm] = useState({ title: "", description: "" });
-  const [message, setMessage] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [price, setPrice] = useState("");
+  const [address, setAddress] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const fd = new FormData();
-    fd.set("title", form.title);
-    fd.set("description", form.description);
+    if (loading) return;
+
+    setLoading(true);
 
     try {
-      await createObject(fd);
-      setMessage("✅ Объект успешно создан");
-      setForm({ title: "", description: "" });
-    } catch {
-      setMessage("❌ Ошибка при создании объекта");
+      const tgUser = WebApp.initDataUnsafe?.user;
+      if (!tgUser) {
+        alert("Ошибка: не найден Telegram user");
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append("title", title);
+      fd.append("price", price);
+      fd.append("address", address);
+      fd.append("userId", tgUser.id.toString());
+
+      if (photo) fd.append("photo", photo);
+
+      // 🔥 правильный вызов
+      await api.post("/objects", fd, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      alert("Объект добавлен!");
+      setTitle("");
+      setPrice("");
+      setAddress("");
+      setPhoto(null);
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка при добавлении объекта");
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="p-4 max-w-md mx-auto">
-      <h2 className="text-lg font-semibold mb-4">Добавить объект</h2>
-      <form onSubmit={handleSubmit} className="space-y-3">
+    <div className="p-4 text-white">
+      <h1 className="text-2xl font-bold mb-4">Добавить объект</h1>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <input
-          value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          type="text"
           placeholder="Название"
-          className="w-full border rounded p-2"
+          className="p-3 rounded-xl bg-neutral-800"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          required
         />
-        <textarea
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-          placeholder="Описание"
-          className="w-full border rounded p-2"
+
+        <input
+          type="number"
+          placeholder="Цена"
+          className="p-3 rounded-xl bg-neutral-800"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          required
         />
+
+        <input
+          type="text"
+          placeholder="Адрес"
+          className="p-3 rounded-xl bg-neutral-800"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          required
+        />
+
+        <input
+          type="file"
+          onChange={(e) => setPhoto(e.target.files?.[0] || null)}
+          className="p-3 rounded-xl bg-neutral-800"
+        />
+
         <button
           type="submit"
-          className="bg-blue-600 text-white rounded px-4 py-2 hover:bg-blue-700"
+          disabled={loading}
+          className="bg-emerald-600 rounded-xl py-3 font-semibold"
         >
-          Сохранить
+          {loading ? "Загрузка..." : "Добавить"}
         </button>
       </form>
-      {message && <p className="mt-4">{message}</p>}
     </div>
   );
 }

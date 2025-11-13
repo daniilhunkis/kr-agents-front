@@ -1,15 +1,10 @@
-// src/lib/api.ts
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_URL;
-console.log("API BASE =", API_BASE);
-
 export const api = axios.create({
-  baseURL: API_BASE, // <--- БОЛЬШЕ НИЧЕГО НЕ ДОБАВЛЯЕМ
+  baseURL: import.meta.env.VITE_API_URL || "https://api.krd-agents.ru/api",
 });
 
-// ====== USERS ======
-
+// types
 export interface UserDto {
   id: number;
   firstName: string;
@@ -19,48 +14,33 @@ export interface UserDto {
   moderatorPassword?: string;
 }
 
-export async function getUser(id: number) {
-  const res = await api.get(`/user/${id}`);
-  return res.data;
+// users
+export function getUser(id: number) {
+  return api.get<UserDto>(`/user/${id}`).then(r => r.data);
+}
+export function registerUser(data: UserDto) {
+  return api.post(`/register`, data).then(r => r.data);
 }
 
-export async function registerUser(data: UserDto) {
-  const res = await api.post("/register", data);
-  return res.data;
+// admin
+export function getAllUsers(adminId: number) {
+  return api.get(`/users`, { params: { admin_id: adminId } }).then(r => r.data);
+}
+export function updateUserRole(id: number, role: string, adminId: number) {
+  return api.patch(`/users/${id}/role`, { role, admin_id: adminId }).then(r => r.data);
+}
+export function setModeratorPassword(id: number, password: string, adminId: number) {
+  return api.patch(`/users/${id}/moderatorPassword`, { password, admin_id: adminId });
 }
 
-// ====== ADMIN ======
-
-export async function getAllUsers(adminId: number) {
-  const res = await api.get("/users", { params: { admin_id: adminId } });
-  return res.data;
+// moderator
+export function moderatorLogin(id: number, password: string) {
+  return api.post(`/moderator/login`, { id, password });
 }
-
-export async function updateUserRole(userId: number, role: string, adminId: number) {
-  const res = await api.patch(`/users/${userId}/role`, { role, admin_id: adminId });
-  return res.data;
-}
-
-export async function setModeratorPassword(userId: number, pwd: string, adminId: number) {
-  const res = await api.patch(`/users/${userId}/moderator-password`, {
-    new_password: pwd,
-    admin_id: adminId,
+export function changeModeratorPassword(id: number, oldPwd: string, newPwd: string) {
+  return api.patch(`/moderator/changePassword`, {
+    id,
+    old: oldPwd,
+    new: newPwd,
   });
-  return res.data;
-}
-
-export async function changeModeratorPassword(userId: number, oldPwd: string, newPwd: string) {
-  const res = await api.patch(`/users/${userId}/change-password`, {
-    old_password: oldPwd,
-    new_password: newPwd,
-  });
-  return res.data;
-}
-
-// ====== OBJECTS ======
-export async function createObject(formData: FormData) {
-  const res = await api.post("/objects", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return res.data;
 }
