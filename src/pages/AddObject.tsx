@@ -1,6 +1,6 @@
 // webapp/src/pages/AddObject.tsx
 import { useState } from "react";
-import api, { createObject } from "../lib/api";
+import { api, createObject } from "../lib/api";
 
 export default function AddObject() {
   const [form, setForm] = useState({ title: "", description: "" });

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import StoryCarousel from "../components/StoryCarousel";
 import ObjectCard from "../components/ObjectCard";
 import { Link } from "react-router-dom";
-import api from "../lib/api";
+import { api } from "../lib/api";
 
 export default function Home() {
   const [stories, setStories] = useState<any[]>([]);
