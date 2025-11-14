@@ -13,6 +13,7 @@ import MyObjectsPage from "./pages/MyObjectsPage";
 import UsersPage from "./pages/UsersPage";
 import Register from "./pages/Register";
 import TelegramLogin from "./components/TelegramLogin";
+import ModeratorPage from "./pages/ModeratorPage";
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/my-objects" element={<MyObjectsPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/moderator" element={<ModeratorPage />} />
         </Route>
       </Routes>
     </Router>
