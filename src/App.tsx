@@ -30,7 +30,7 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/showings" element={<ShowsPage />} />
           <Route path="/admin" element={<AdminPage />} />
-          <Route path="/add-object" element={<AddObject />} />
+          <Route path="/add" element={<AddObject />} />
           <Route path="/my-objects" element={<MyObjectsPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/register" element={<Register />} />

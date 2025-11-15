@@ -58,7 +58,7 @@ export default function MainLayout() {
     { to: "/", label: "🏠 Главная" },
     { to: "/search", label: "🔎 Поиск" },
     { to: "/express", label: "⚡ Экспресс" },
-    { to: "/profile", label: "📦 Мои объекты" },
+    { to: "/my-objects", label: "📦 Мои объекты" },
   ];
 
   // главный админ → видит всё
