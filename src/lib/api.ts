@@ -3,12 +3,11 @@ import axios from "axios";
 
 const API_BASE = import.meta.env.VITE_API_URL || "https://api.krd-agents.ru/api";
 
-// Базовый инстанс
 export const api = axios.create({
   baseURL: API_BASE,
 });
 
-// ====== ТИПЫ ======
+// ====== USERS ======
 
 export type UserRole = "user" | "moderator" | "admin";
 
@@ -18,39 +17,7 @@ export interface UserDto {
   lastName?: string;
   phone?: string;
   role?: UserRole;
-  // пароль модератора (приходит с бэка только для самого модератора / админа)
   moderatorPassword?: string;
-}
-
-export type ObjectStatus = "pending" | "approved" | "rejected" | "revision";
-
-export interface ObjectDto {
-  id: number;
-  ownerId: number;
-  title: string;
-  address?: string;
-  price?: number;
-  rooms?: number;
-  areaTotal?: number;
-  kitchenArea?: number;
-  renovation?: string;
-  status?: ObjectStatus;
-  moderatorComment?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-// ====== USERS ======
-
-export type Role = "user" | "moderator" | "admin";
-
-export interface UserDto {
-  id: number;
-  firstName: string;
-  lastName?: string;
-  phone?: string;
-  role?: Role;
-  moderatorPassword?: string; // <-- добавили
 }
 
 export async function getUser(userId: number) {
@@ -59,14 +26,11 @@ export async function getUser(userId: number) {
 }
 
 export async function registerUser(data: UserDto) {
-  const res = await api.post<{ status: string; user: UserDto }>(
-    "/register",
-    data
-  );
+  const res = await api.post<{ status: string; user: UserDto }>("/register", data);
   return res.data;
 }
 
-// ====== ADMIN (ТОЛЬКО ДЛЯ ГЛАВНОГО АДМИНА) ======
+// ====== ADMIN ======
 
 export async function getAllUsers(adminId: number) {
   const res = await api.get<UserDto[]>("/users", {
@@ -77,77 +41,84 @@ export async function getAllUsers(adminId: number) {
 
 export async function updateUserRole(
   userId: number,
-  role: Role,
+  role: UserRole,
   adminId: number
 ) {
   const res = await api.patch<{ status: string; user: UserDto }>(
     `/users/${userId}/role`,
-    {
-      role,
-      admin_id: adminId,
-    }
+    { role, admin_id: adminId }
   );
   return res.data;
 }
 
-// ====== МОДЕРАТОР ======
-
-/**
- * Смена пароля модератора самим модератором.
- * oldPassword может быть пустым, если пароль ещё не был задан.
- */
- export async function changeModeratorPassword(
-   userId: number,
-   payload: { oldPassword?: string; newPassword: string; adminId?: number }
- ) {
-   const res = await api.post<{ status: string; user: UserDto }>(
-     `/moderator/${userId}/password/change`,
-     payload
-   );
-   return res.data;
- }
-
-/**
- * Получить список объектов, которые ждут модерации.
- * Бэк может фильтровать по роли и статусу (pending / revision).
- */
-export async function getModerationList() {
-  const res = await api.get<ObjectDto[]>("/objects/moderation");
-  return res.data;
+export interface ModeratorPasswordPayload {
+  oldPassword?: string;
+  newPassword: string;
+  adminId?: number;
 }
 
-/**
- * Обновить статус объекта модератором.
- */
-export async function updateObjectStatus(
-  objectId: number,
-  status: ObjectStatus,
-  comment?: string
+export async function changeModeratorPassword(
+  userId: number,
+  payload: ModeratorPasswordPayload
 ) {
-  const res = await api.post<{ status: string; object: ObjectDto }>(
-    `/objects/${objectId}/moderation`,
-    {
-      status,
-      comment,
-    }
+  const res = await api.post<{ status: string; user: UserDto }>(
+    `/moderator/${userId}/password/change`,
+    payload
   );
   return res.data;
 }
 
-// ====== МОИ ОБЪЕКТЫ ======
+// ====== OBJECTS ======
+
+export type ObjectStatus = "pending" | "approved" | "needs_fix" | "rejected";
+
+export interface ObjectDto {
+  id: number;
+  ownerId: number;
+  district?: string;
+  street?: string;
+  complexName?: string;
+  house?: string;
+  floor?: string;
+  roomsType: string;
+  roomsCustom?: string;
+  areaTotal?: number;
+  kitchenArea?: number;
+  price: number;
+  commissionType: "inside" | "on_top";
+  commissionValue: number;
+  commissionUnit: "percent" | "rub";
+  status: ObjectStatus;
+  comment?: string | null;
+  photos?: string[];
+  planPhotos?: string[];
+  docsPhotos?: string[];
+  createdAt: string;
+}
+
+export async function createObject(formData: FormData) {
+  const res = await api.post<ObjectDto>("/objects", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
 
 export async function getMyObjects(ownerId: number) {
   const res = await api.get<ObjectDto[]>(`/objects/my/${ownerId}`);
   return res.data;
 }
 
-// ====== OBJECTS (добавление; AddObject может использовать и createObject, и api.post) ======
-
-export async function createObject(data: FormData) {
-  const res = await api.post("/objects", data, {
-    headers: { "Content-Type": "multipart/form-data" },
+export async function getObjectsForModeration(moderatorId: number) {
+  const res = await api.get<ObjectDto[]>("/objects/moderation", {
+    params: { moderator_id: moderatorId },
   });
   return res.data;
 }
 
-export default api;
+export async function changeObjectStatus(
+  objectId: number,
+  payload: { status: ObjectStatus; comment?: string; moderatorId: number }
+) {
+  const res = await api.patch<ObjectDto>(`/objects/${objectId}/status`, payload);
+  return res.data;
+}
