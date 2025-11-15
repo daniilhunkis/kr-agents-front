@@ -1,131 +1,124 @@
 import React, { useEffect, useState } from "react";
 import WebApp from "@twa-dev/sdk";
-import { getMyObjects, type ObjectDto } from "../lib/api";
+import { getUser, registerUser, type UserDto } from "../lib/api";
+import { Link } from "react-router-dom";
 
 export default function MyObjectsPage() {
-  const tgUser = WebApp.initDataUnsafe?.user;
-  const ownerId = tgUser?.id;
-
-  const [objects, setObjects] = useState<ObjectDto[]>([]);
+  const [user, setUser] = useState<UserDto | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
+
+  // ---- 1. Загружаем данные пользователя ----
   useEffect(() => {
-    const load = async () => {
-      if (!ownerId) return;
+    const init = async () => {
       try {
-        const data = await getMyObjects(ownerId);
-        setObjects(data);
+        const tg = WebApp.initDataUnsafe?.user;
+        if (!tg) return;
+
+        const u = await getUser(tg.id);
+        setUser(u);
+
+        setFirstName(u.firstName || "");
+        setLastName(u.lastName || "");
+        setPhone(u.phone || "");
+
       } catch (err) {
-        console.error("Ошибка загрузки моих объектов", err);
+        console.error("Ошибка загрузки пользователя", err);
       } finally {
         setLoading(false);
       }
     };
-    load();
-  }, [ownerId]);
 
-  if (!ownerId) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-tgBg text-white">
-        Откройте приложение внутри Telegram
-      </div>
-    );
-  }
+    init();
+  }, []);
+
+  // ---- 2. Сохранение данных ----
+  const handleSave = async () => {
+    if (!user) return;
+
+    try {
+      const updated = await registerUser({
+        id: user.id,
+        firstName,
+        lastName,
+        phone,
+        role: user.role,
+      });
+
+      WebApp.showAlert("Данные успешно обновлены");
+      setUser(updated.user);
+    } catch (err) {
+      console.error(err);
+      WebApp.showAlert("Ошибка при сохранении");
+    }
+  };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-tgBg text-white">
+      <div className="flex items-center justify-center h-screen text-white">
         Загрузка...
       </div>
     );
   }
 
-  const statusLabel: Record<string, string> = {
-    pending: "На модерации",
-    approved: "Одобрено",
-    needs_fix: "На доработке",
-    rejected: "Отклонено",
-  };
-
-  const statusColor: Record<string, string> = {
-    pending: "bg-yellow-500/20 text-yellow-300",
-    approved: "bg-emerald-500/20 text-emerald-300",
-    needs_fix: "bg-orange-500/20 text-orange-300",
-    rejected: "bg-red-500/20 text-red-300",
-  };
+  if (!user) {
+    return (
+      <div className="p-4 text-white">
+        Ошибка загрузки пользователя
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-tgBg text-white px-4 pb-20 pt-4">
-      <h1 className="text-2xl font-bold mb-4">Мои объекты</h1>
+    <div className="p-4 text-white">
+      <h1 className="text-2xl font-bold mb-4">Мои данные</h1>
 
-      {objects.length === 0 && (
-        <div className="text-gray-400 text-sm">
-          У тебя пока нет объектов. Нажми «Добавить объект», чтобы отправить на
-          модерацию.
-        </div>
-      )}
+      {/* === Форма пользователя === */}
+      <div className="bg-gray-900 p-4 rounded-2xl mb-6 flex flex-col gap-3">
+        <input
+          className="bg-gray-800 rounded-xl p-3 outline-none"
+          placeholder="Имя"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+        />
 
-      <div className="space-y-3">
-        {objects.map((o) => (
-          <div
-            key={o.id}
-            className="bg-card2 rounded-2xl p-3 border border-gray-800 text-sm"
-          >
-            <div className="flex justify-between items-start gap-2">
-              <div>
-                <div className="font-semibold">
-                  {o.roomsType === "other" && o.roomsCustom
-                    ? o.roomsCustom
-                    : o.roomsType === "studio"
-                    ? "Студия"
-                    : `${o.roomsType}-к квартира`}
-                  {o.areaTotal ? ` · ${o.areaTotal} м²` : ""}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">
-                  {[o.district, o.street, o.house, o.complexName]
-                    .filter(Boolean)
-                    .join(", ")}
-                </div>
-              </div>
-              <div
-                className={`px-2 py-1 rounded-full text-[11px] ${statusColor[o.status] || "bg-gray-700 text-gray-200"}`}
-              >
-                {statusLabel[o.status] || o.status}
-              </div>
-            </div>
+        <input
+          className="bg-gray-800 rounded-xl p-3 outline-none"
+          placeholder="Фамилия"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+        />
 
-            <div className="mt-2 flex justify-between items-center">
-              <div className="text-sm font-semibold">
-                {o.price.toLocaleString("ru-RU")} ₽
-              </div>
-              <div className="text-[11px] text-gray-400 text-right">
-                Комиссия: {o.commissionValue}{" "}
-                {o.commissionUnit === "percent" ? "%" : "₽"} (
-                {o.commissionType === "inside" ? "внутри цены" : "сверху"})
-              </div>
-            </div>
+        <input
+          className="bg-gray-800 rounded-xl p-3 outline-none"
+          placeholder="Телефон"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+        />
 
-            {o.comment && (
-              <div className="mt-2 text-xs text-gray-300">
-                <span className="font-semibold">Комментарий модератора: </span>
-                {o.comment}
-              </div>
-            )}
+        <button
+          onClick={handleSave}
+          className="bg-emerald-600 py-3 rounded-xl font-semibold mt-2"
+        >
+          Сохранить
+        </button>
+      </div>
 
-            {o.photos && o.photos.length > 0 && (
-              <div className="mt-2 flex gap-2 overflow-x-auto">
-                {o.photos.slice(0, 3).map((src, idx) => (
-                  <img
-                    key={idx}
-                    src={src}
-                    className="w-20 h-16 object-cover rounded-lg border border-gray-700"
-                    alt="photo"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+      {/* === Объекты пользователя === */}
+      <h2 className="text-xl font-bold mb-3">Мои объекты</h2>
+
+      <Link
+        to="/add"
+        className="block bg-emerald-700 hover:bg-emerald-600 text-center py-3 rounded-xl font-semibold mb-4"
+      >
+        ➕ Добавить объект
+      </Link>
+
+      <div className="bg-gray-900 p-4 rounded-2xl text-gray-300">
+        📦 Список объектов будет здесь (подключим после API объектов)
       </div>
     </div>
   );
