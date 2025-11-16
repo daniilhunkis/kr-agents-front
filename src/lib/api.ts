@@ -26,11 +26,17 @@ export async function getUser(userId: number) {
 }
 
 export async function registerUser(data: UserDto) {
-  const res = await api.post<{ status: string; user: UserDto }>("/register", data);
+  const res = await api.post<{ status: string; user: UserDto }>(
+    "/register",
+    data
+  );
   return res.data;
 }
 
-// ====== ADMIN ======
+export async function checkAdminRole(userId: number) {
+  const res = await api.get<{ role: UserRole }>(`/admin/check/${userId}`);
+  return res.data;
+}
 
 export async function getAllUsers(adminId: number) {
   const res = await api.get<UserDto[]>("/users", {
@@ -46,20 +52,17 @@ export async function updateUserRole(
 ) {
   const res = await api.patch<{ status: string; user: UserDto }>(
     `/users/${userId}/role`,
-    { role, admin_id: adminId }
+    {
+      role,
+      admin_id: adminId,
+    }
   );
   return res.data;
 }
 
-export interface ModeratorPasswordPayload {
-  oldPassword?: string;
-  newPassword: string;
-  adminId?: number;
-}
-
 export async function changeModeratorPassword(
   userId: number,
-  payload: ModeratorPasswordPayload
+  payload: { oldPassword?: string; newPassword: string; adminId?: number }
 ) {
   const res = await api.post<{ status: string; user: UserDto }>(
     `/moderator/${userId}/password/change`,
@@ -70,30 +73,30 @@ export async function changeModeratorPassword(
 
 // ====== OBJECTS ======
 
-export type ObjectStatus = "pending" | "approved" | "needs_fix" | "rejected";
+export type ObjectStatus = "waiting" | "approved" | "rejected" | "revision";
 
 export interface ObjectDto {
-  id: number;
+  id: string;
   ownerId: number;
-  district?: string;
-  street?: string;
-  complexName?: string;
-  house?: string;
+  district: string;
+  street: string;
+  house: string;
+  flat?: string;
   floor?: string;
   roomsType: string;
   roomsCustom?: string;
-  areaTotal?: number;
+  area: number;
   kitchenArea?: number;
   price: number;
-  commissionType: "inside" | "on_top";
+  commissionPlace: "inside" | "on_top";
   commissionValue: number;
-  commissionUnit: "percent" | "rub";
+  commissionValueType: "percent" | "fixed";
   status: ObjectStatus;
-  comment?: string | null;
-  photos?: string[];
-  planPhotos?: string[];
-  docsPhotos?: string[];
-  createdAt: string;
+  moderatorComment?: string | null;
+  photos: string[];
+  planPhotos: string[];
+  docPhotos: string[];
+  createdAt?: string;
 }
 
 export async function createObject(formData: FormData) {
@@ -103,8 +106,8 @@ export async function createObject(formData: FormData) {
   return res.data;
 }
 
-export async function getMyObjects(ownerId: number) {
-  const res = await api.get<ObjectDto[]>(`/objects/my/${ownerId}`);
+export async function getMyObjects(userId: number) {
+  const res = await api.get<ObjectDto[]>(`/objects/my/${userId}`);
   return res.data;
 }
 
@@ -115,10 +118,10 @@ export async function getObjectsForModeration(moderatorId: number) {
   return res.data;
 }
 
-export async function changeObjectStatus(
-  objectId: number,
-  payload: { status: ObjectStatus; comment?: string; moderatorId: number }
+export async function moderateObject(
+  objectId: string,
+  payload: { moderatorId: number; action: "approve" | "reject" | "revision"; comment?: string }
 ) {
-  const res = await api.patch<ObjectDto>(`/objects/${objectId}/status`, payload);
+  const res = await api.post<ObjectDto>(`/objects/${objectId}/moderate`, payload);
   return res.data;
 }
