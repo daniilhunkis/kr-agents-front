@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useOutletContext, Link } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import WebApp from "@twa-dev/sdk";
 import type { UserDto, ObjectDto } from "../lib/api";
 import { getMyObjects } from "../lib/api";
@@ -38,6 +38,8 @@ function statusColor(status: ObjectDto["status"]) {
 
 export default function MyObjectsPage() {
   const { currentUser } = useOutletContext<OutletCtx>();
+  const navigate = useNavigate();
+
   const [objects, setObjects] = useState<ObjectDto[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -78,7 +80,7 @@ export default function MyObjectsPage() {
 
   return (
     <div className="min-h-screen bg-tgBg text-white px-4 pb-20 pt-4">
-      <header className="mb-4 flex items-center justify-between">
+      <header className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Мои объекты</h1>
           <p className="text-sm text-gray-400 mt-1">
@@ -87,20 +89,23 @@ export default function MyObjectsPage() {
           </p>
         </div>
 
-        <Link
-          to="/add-object"
-          className="px-4 py-2 rounded-xl bg-emerald-600 text-sm font-semibold"
+        <button
+          onClick={() => navigate("/add-object")}
+          className="shrink-0 rounded-2xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-semibold"
         >
           + Добавить объект
-        </Link>
+        </button>
       </header>
 
       {total === 0 ? (
-        <div className="bg-card2 rounded-2xl p-4 border border-gray-800 text-sm text-gray-300">
-          У вас пока нет объектов.
-          <Link to="/add-object" className="text-emerald-400 underline ml-1">
-            Добавить объект
-          </Link>
+        <div className="bg-card2 rounded-2xl p-4 border border-gray-800 text-sm text-gray-300 space-y-3">
+          <p>У вас пока нет объектов.</p>
+          <button
+            onClick={() => navigate("/add-object")}
+            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2 text-sm font-semibold"
+          >
+            Добавить первый объект
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -132,7 +137,6 @@ export default function MyObjectsPage() {
                       {o.roomsType}
                       {o.roomsCustom ? ` · ${o.roomsCustom}` : ""} · {o.area} м²
                     </h2>
-
                     <span
                       className={`text-[10px] px-2 py-1 rounded-full ${statusColor(
                         o.status
@@ -155,8 +159,8 @@ export default function MyObjectsPage() {
                     Комиссия:{" "}
                     {o.commissionPlace === "inside"
                       ? "внутри цены"
-                      : "сверху"}{" "}
-                    ·{" "}
+                      : "сверху цены"}
+                    ,{" "}
                     {o.commissionValueType === "percent"
                       ? `${o.commissionValue}%`
                       : `${o.commissionValue.toLocaleString("ru-RU")} ₽`}
