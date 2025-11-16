@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useNavigate } from "react-router-dom";
 import WebApp from "@twa-dev/sdk";
 import type { UserDto, ObjectDto } from "../lib/api";
 import { getMyObjects } from "../lib/api";
@@ -38,6 +38,8 @@ function statusColor(status: ObjectDto["status"]) {
 
 export default function MyObjectsPage() {
   const { currentUser } = useOutletContext<OutletCtx>();
+  const navigate = useNavigate();
+
   const [objects, setObjects] = useState<ObjectDto[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -86,6 +88,13 @@ export default function MyObjectsPage() {
             Доработка: {revision}
           </p>
         </div>
+
+        <button
+          onClick={() => navigate("/add-object")}
+          className="bg-emerald-600 hover:bg-emerald-500 px-3 py-2 rounded-xl text-sm font-semibold"
+        >
+          + Добавить объект
+        </button>
       </header>
 
       {total === 0 ? (
@@ -123,6 +132,7 @@ export default function MyObjectsPage() {
                       {o.roomsType}
                       {o.roomsCustom ? ` · ${o.roomsCustom}` : ""} · {o.area} м²
                     </h2>
+
                     <span
                       className={`text-[10px] px-2 py-1 rounded-full ${statusColor(
                         o.status

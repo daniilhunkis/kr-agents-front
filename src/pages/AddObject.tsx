@@ -62,10 +62,13 @@ export default function AddObject() {
 
   const addFiles = (files: FileList | null, type: "photo" | "plan" | "doc") => {
     if (!files || files.length === 0) return;
-    const list = Array.from(files);
-    if (type === "photo") setPhotos((prev) => [...prev, ...list]);
-    if (type === "plan") setPlanPhotos((prev) => [...prev, ...list]);
-    if (type === "doc") setDocPhotos((prev) => [...prev, ...list]);
+
+    const file = files[0]; // ← мобильные добавляют по одной
+    if (!file) return;
+
+    if (type === "photo") setPhotos((prev) => [...prev, file]);
+    if (type === "plan") setPlanPhotos((prev) => [...prev, file]);
+    if (type === "doc") setDocPhotos((prev) => [...prev, file]);
   };
 
   const validate = (): string | null => {
@@ -73,12 +76,8 @@ export default function AddObject() {
     if (!street.trim()) return "Укажите улицу";
     if (!house.trim()) return "Укажите дом";
     if (!floor.trim()) return "Укажите этаж";
-
     if (!area.trim()) return "Укажите площадь";
     if (!price.trim()) return "Укажите цену";
-
-    if (!commissionValue.trim())
-      return "Укажите размер комиссии (процент или ₽)";
     if (photos.length === 0) return "Добавьте минимум одно фото объекта";
     if (docPhotos.length === 0)
       return "Добавьте фото документов (ЕГРН/договор)";
@@ -97,48 +96,47 @@ export default function AddObject() {
 
     const tgUser = WebApp.initDataUnsafe?.user;
     if (!tgUser) {
-      alert("Не удалось получить Telegram-пользователя, откройте через бот");
+      alert("Telegram-пользователь не найден. Откройте через бот.");
       return;
     }
 
     try {
       setSubmitting(true);
 
-      const formData = new FormData();
-      formData.append("owner_id", String(tgUser.id));
-      formData.append("district", district);
-      formData.append("street", street);
-      formData.append("house", house);
-      if (flat) formData.append("flat", flat);
-      formData.append("floor", floor);
+      const fd = new FormData();
+      fd.append("owner_id", String(tgUser.id));
+      fd.append("district", district);
+      fd.append("street", street);
+      fd.append("house", house);
+      if (flat) fd.append("flat", flat);
+      fd.append("floor", floor);
 
-      formData.append("rooms_type", roomsType);
+      fd.append("rooms_type", roomsType);
       if (roomsType === "Другое" && roomsCustom.trim()) {
-        formData.append("rooms_custom", roomsCustom.trim());
+        fd.append("rooms_custom", roomsCustom.trim());
       }
 
-      formData.append("area", area.replace(",", "."));
-      if (kitchenArea) {
-        formData.append("kitchen_area", kitchenArea.replace(",", "."));
-      }
-      formData.append("price", price.replace(" ", ""));
+      fd.append("area", area.replace(",", "."));
+      if (kitchenArea)
+        fd.append("kitchen_area", kitchenArea.replace(",", "."));
 
-      formData.append("commission_place", commissionPlace);
-      formData.append(
+      fd.append("price", price.replace(" ", ""));
+
+      fd.append("commission_place", commissionPlace);
+      fd.append(
         "commission_value",
         commissionValue.replace(",", ".").replace(" ", "")
       );
-      formData.append("commission_value_type", commissionValueType);
+      fd.append("commission_value_type", commissionValueType);
 
-      photos.forEach((file) => formData.append("photos", file));
-      planPhotos.forEach((file) => formData.append("plan_photos", file));
-      docPhotos.forEach((file) => formData.append("doc_photos", file));
+      photos.forEach((file) => fd.append("photos", file));
+      planPhotos.forEach((file) => fd.append("plan_photos", file));
+      docPhotos.forEach((file) => fd.append("doc_photos", file));
 
-      await createObject(formData);
+      await createObject(fd);
 
       alert("Объект отправлен на модерацию 🎉");
 
-      // сброс формы
       setStreet("");
       setHouse("");
       setFlat("");
@@ -154,9 +152,9 @@ export default function AddObject() {
       setPhotos([]);
       setPlanPhotos([]);
       setDocPhotos([]);
-    } catch (error) {
-      console.error(error);
-      alert("Ошибка при добавлении объекта. Попробуйте позже.");
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка при добавлении объекта.");
     } finally {
       setSubmitting(false);
     }
@@ -194,7 +192,6 @@ export default function AddObject() {
               value={district}
               onChange={(e) => setDistrict(e.target.value)}
               className="w-full rounded-xl bg-card px-4 py-3 text-white outline-none border border-gray-700 focus:border-emerald-500 text-sm"
-              required
             >
               <option value="">Выберите район</option>
               {DISTRICTS.map((d) => (
@@ -213,7 +210,6 @@ export default function AddObject() {
                 onChange={(e) => setStreet(e.target.value)}
                 className="w-full rounded-xl bg-card px-4 py-3 text-white outline-none border border-gray-700 focus:border-emerald-500 text-sm"
                 placeholder="Красная"
-                required
               />
             </div>
             <div className="space-y-1">
@@ -223,14 +219,15 @@ export default function AddObject() {
                 onChange={(e) => setHouse(e.target.value)}
                 className="w-full rounded-xl bg-card px-4 py-3 text-white outline-none border border-gray-700 focus:border-emerald-500 text-sm"
                 placeholder="12"
-                required
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs text-gray-400">Квартира (если есть)</label>
+              <label className="text-xs text-gray-400">
+                Квартира (если есть)
+              </label>
               <input
                 value={flat}
                 onChange={(e) => setFlat(e.target.value)}
@@ -245,7 +242,6 @@ export default function AddObject() {
                 onChange={(e) => setFloor(e.target.value)}
                 className="w-full rounded-xl bg-card px-4 py-3 text-white outline-none border border-gray-700 focus:border-emerald-500 text-sm"
                 placeholder="9/17"
-                required
               />
             </div>
           </div>
@@ -290,9 +286,9 @@ export default function AddObject() {
                 onChange={(e) => setArea(e.target.value)}
                 className="w-full rounded-xl bg-card px-4 py-3 text-white outline-none border border-gray-700 focus:border-emerald-500 text-sm"
                 placeholder="38"
-                required
               />
             </div>
+
             <div className="space-y-1">
               <label className="text-xs text-gray-400">Площадь кухни, м²</label>
               <input
@@ -311,7 +307,6 @@ export default function AddObject() {
               onChange={(e) => setPrice(e.target.value)}
               className="w-full rounded-xl bg-card px-4 py-3 text-white outline-none border border-gray-700 focus:border-emerald-500 text-sm"
               placeholder="5200000"
-              required
             />
           </div>
         </section>
@@ -352,17 +347,13 @@ export default function AddObject() {
 
           <div className="space-y-1">
             <label className="text-xs text-gray-400">
-              Значение комиссии ({commissionValueType === "percent"
-                ? "%"
-                : "₽"}
-              )
+              Значение комиссии ({commissionValueType === "percent" ? "%" : "₽"})
             </label>
             <input
               value={commissionValue}
               onChange={(e) => setCommissionValue(e.target.value)}
               className="w-full rounded-xl bg-card px-4 py-3 text-white outline-none border border-gray-700 focus:border-emerald-500 text-sm"
               placeholder={commissionValueType === "percent" ? "3" : "150000"}
-              required
             />
           </div>
         </section>
@@ -379,13 +370,16 @@ export default function AddObject() {
             >
               + Добавить фото объекта
             </button>
+
             <input
               ref={photoInputRef}
               type="file"
               accept="image/*"
+              capture="environment"
               className="hidden"
               onChange={(e) => addFiles(e.target.files, "photo")}
             />
+
             {renderFilesPreview(photos)}
           </div>
 
@@ -397,13 +391,16 @@ export default function AddObject() {
             >
               + Добавить фото планировки
             </button>
+
             <input
               ref={planInputRef}
               type="file"
               accept="image/*"
+              capture="environment"
               className="hidden"
               onChange={(e) => addFiles(e.target.files, "plan")}
             />
+
             {renderFilesPreview(planPhotos)}
           </div>
 
@@ -415,13 +412,16 @@ export default function AddObject() {
             >
               + Фото документов (ЕГРН, договор)
             </button>
+
             <input
               ref={docInputRef}
               type="file"
               accept="image/*,application/pdf"
+              capture="environment"
               className="hidden"
               onChange={(e) => addFiles(e.target.files, "doc")}
             />
+
             {renderFilesPreview(docPhotos)}
           </div>
         </section>
