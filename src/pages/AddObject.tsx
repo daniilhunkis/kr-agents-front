@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import WebApp from "@twa-dev/sdk";
 import { createObject } from "../lib/api";
 
+// Расширенный список всех районов Краснодара
 const DISTRICTS = [
   "Центральный",
   "Прикубанский",
@@ -15,6 +16,10 @@ const DISTRICTS = [
   "Музыкальный",
   "Московский",
   "Витаминкомбинат",
+  "ГМР",
+  "Черемушки",
+  "40 лет Победы",
+  "Молодежный",
 ];
 
 const ROOM_TYPES = [
@@ -53,22 +58,31 @@ export default function AddObject() {
   const [planPhotos, setPlanPhotos] = useState<File[]>([]);
   const [docPhotos, setDocPhotos] = useState<File[]>([]);
 
-  const [agreed, setAgreed] = useState(false);
+  const [offerAccepted, setOfferAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const planInputRef = useRef<HTMLInputElement | null>(null);
   const docInputRef = useRef<HTMLInputElement | null>(null);
 
-  const addFiles = (files: FileList | null, type: "photo" | "plan" | "doc") => {
+  // iOS fix — input must reset value after each upload
+  const resetInputValue = (ref: React.RefObject<HTMLInputElement>) => {
+    if (ref.current) ref.current.value = "";
+  };
+
+  const addFiles = (
+    files: FileList | null,
+    type: "photo" | "plan" | "doc",
+    ref: React.RefObject<HTMLInputElement>
+  ) => {
     if (!files || files.length === 0) return;
 
-    const file = files[0]; // по одной
-    if (!file) return;
+    const list = Array.from(files);
+    if (type === "photo") setPhotos((prev) => [...prev, ...list]);
+    if (type === "plan") setPlanPhotos((prev) => [...prev, ...list]);
+    if (type === "doc") setDocPhotos((prev) => [...prev, ...list]);
 
-    if (type === "photo") setPhotos((prev) => [...prev, file]);
-    if (type === "plan") setPlanPhotos((prev) => [...prev, file]);
-    if (type === "doc") setDocPhotos((prev) => [...prev, file]);
+    resetInputValue(ref);
   };
 
   const validate = (): string | null => {
@@ -80,11 +94,13 @@ export default function AddObject() {
     if (!area.trim()) return "Укажите площадь";
     if (!price.trim()) return "Укажите цену";
 
+    if (!commissionValue.trim())
+      return "Укажите размер комиссии";
     if (photos.length === 0) return "Добавьте минимум одно фото объекта";
     if (docPhotos.length === 0)
-      return "Добавьте документы (ЕГРН/договор)";
-
-    if (!agreed) return "Вы должны согласиться с условиями оферты";
+      return "Добавьте фото документов";
+    if (!offerAccepted)
+      return "Вы должны согласиться с условиями оферты";
 
     return null;
   };
@@ -100,84 +116,66 @@ export default function AddObject() {
 
     const tgUser = WebApp.initDataUnsafe?.user;
     if (!tgUser) {
-      alert("Откройте приложение через Telegram-бота");
+      alert("Откройте приложение через Телеграм");
       return;
     }
 
     try {
       setSubmitting(true);
 
-      const fd = new FormData();
-      fd.append("owner_id", String(tgUser.id));
-      fd.append("district", district);
-      fd.append("street", street);
-      fd.append("house", house);
-      fd.append("floor", floor);
+      const formData = new FormData();
+      formData.append("owner_id", String(tgUser.id));
+      formData.append("district", district);
+      formData.append("street", street);
+      formData.append("house", house);
 
-      fd.append("rooms_type", roomsType);
-      if (roomsType === "Другое" && roomsCustom.trim())
-        fd.append("rooms_custom", roomsCustom.trim());
+      formData.append("floor", floor);
+      formData.append("rooms_type", roomsType);
 
-      fd.append("area", area.replace(",", "."));
-      if (kitchenArea)
-        fd.append("kitchen_area", kitchenArea.replace(",", "."));
+      if (roomsType === "Другое" && roomsCustom.trim()) {
+        formData.append("rooms_custom", roomsCustom.trim());
+      }
 
-      fd.append("price", price.replace(" ", ""));
+      formData.append("area", area.replace(",", "."));
+      if (kitchenArea) {
+        formData.append("kitchen_area", kitchenArea.replace(",", "."));
+      }
+      formData.append("price", price.replace(/ /g, ""));
 
-      fd.append("commission_place", commissionPlace);
-      fd.append(
+      formData.append("commission_place", commissionPlace);
+      formData.append(
         "commission_value",
-        commissionValue.replace(",", ".").replace(" ", "")
+        commissionValue.replace(",", ".").replace(/ /g, "")
       );
-      fd.append("commission_value_type", commissionValueType);
+      formData.append("commission_value_type", commissionValueType);
 
-      photos.forEach((f) => fd.append("photos", f));
-      planPhotos.forEach((f) => fd.append("plan_photos", f));
-      docPhotos.forEach((f) => fd.append("doc_photos", f));
+      photos.forEach((file) => formData.append("photos", file));
+      planPhotos.forEach((file) => formData.append("plan_photos", file));
+      docPhotos.forEach((file) => formData.append("doc_photos", file));
 
-      await createObject(fd);
+      await createObject(formData);
 
       alert("Объект отправлен на модерацию 🎉");
-
-      // сброс формы
-      setDistrict("");
-      setStreet("");
-      setHouse("");
-      setFloor("");
-      setArea("");
-      setKitchenArea("");
-      setPrice("");
-      setRoomsType("Студия");
-      setRoomsCustom("");
-      setCommissionPlace("inside");
-      setCommissionValue("");
-      setCommissionValueType("percent");
-      setPhotos([]);
-      setPlanPhotos([]);
-      setDocPhotos([]);
-      setAgreed(false);
-
-    } catch (err) {
-      console.error(err);
-      alert("Ошибка отправки. Попробуйте позже.");
+      window.location.href = "/my-objects";
+    } catch (e) {
+      console.error(e);
+      alert("Ошибка добавления объекта");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const renderFilesPreview = (files: File[]) => (
-    files.length > 0 && (
-      <div className="flex gap-2 overflow-x-auto mt-2">
-        {files.map((f, i) => (
-          <div
-            key={i}
-            className="w-20 h-20 bg-neutral-800 rounded-xl flex items-center justify-center text-[10px] text-center px-1"
-          >
-            {f.name}
-          </div>
-        ))}
-      </div>
-    )
+  const renderPreview = (files: File[]) => (
+    <div className="flex gap-2 overflow-x-auto mt-2">
+      {files.map((file, i) => (
+        <div
+          key={i}
+          className="w-20 h-20 bg-neutral-900 rounded-xl flex items-center justify-center text-[10px] px-1 text-gray-300"
+        >
+          {file.name}
+        </div>
+      ))}
+    </div>
   );
 
   return (
@@ -187,197 +185,238 @@ export default function AddObject() {
       <form onSubmit={handleSubmit} className="space-y-4">
 
         {/* Адрес */}
-        <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
+        <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Адрес</h2>
 
-          <label className="text-xs text-gray-400">Район</label>
-          <select
-            value={district}
-            onChange={(e) => setDistrict(e.target.value)}
-            className="w-full rounded-xl bg-card px-4 py-3 text-white border border-gray-700"
-          >
-            <option value="">Выберите район</option>
-            {DISTRICTS.map((d) => (
-              <option key={d}>{d}</option>
-            ))}
-          </select>
+          <div>
+            <label className="text-xs text-gray-400">Район</label>
+            <select
+              value={district}
+              onChange={(e) => setDistrict(e.target.value)}
+              required
+              className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white mt-1"
+            >
+              <option value="">Выберите район</option>
+              {DISTRICTS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs text-gray-400">Улица</label>
             <input
               value={street}
               onChange={(e) => setStreet(e.target.value)}
-              placeholder="Улица"
-              className="rounded-xl bg-card px-4 py-3 border border-gray-700"
+              required
+              className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white"
+              placeholder="Красная"
             />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-gray-400">Дом</label>
             <input
               value={house}
               onChange={(e) => setHouse(e.target.value)}
-              placeholder="Дом"
-              className="rounded-xl bg-card px-4 py-3 border border-gray-700"
+              required
+              className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white"
+              placeholder="12"
             />
           </div>
 
-          <input
-            value={floor}
-            onChange={(e) => setFloor(e.target.value)}
-            placeholder="Этаж"
-            className="rounded-xl bg-card px-4 py-3 border border-gray-700"
-          />
+          <div className="space-y-1">
+            <label className="text-xs text-gray-400">Этаж</label>
+            <input
+              value={floor}
+              onChange={(e) => setFloor(e.target.value)}
+              required
+              className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white"
+              placeholder="9/17"
+            />
+          </div>
         </section>
 
         {/* Параметры */}
-        <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
+        <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Параметры</h2>
 
-          <select
-            value={roomsType}
-            onChange={(e) => setRoomsType(e.target.value)}
-            className="rounded-xl bg-card px-4 py-3 border border-gray-700"
-          >
-            {ROOM_TYPES.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
+          <div>
+            <label className="text-xs text-gray-400">Комнат</label>
+            <select
+              value={roomsType}
+              onChange={(e) => setRoomsType(e.target.value)}
+              className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white mt-1"
+            >
+              {ROOM_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {roomsType === "Другое" && (
-            <input
-              value={roomsCustom}
-              onChange={(e) => setRoomsCustom(e.target.value)}
-              placeholder="Свой вариант"
-              className="rounded-xl bg-card px-4 py-3 border border-gray-700"
-            />
+            <div>
+              <label className="text-xs text-gray-400">Свой вариант</label>
+              <input
+                value={roomsCustom}
+                onChange={(e) => setRoomsCustom(e.target.value)}
+                className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white"
+                placeholder="Например: свободной планировки"
+              />
+            </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <input
-              value={area}
-              onChange={(e) => setArea(e.target.value)}
-              placeholder="Площадь, м²"
-              className="rounded-xl bg-card px-4 py-3 border border-gray-700"
-            />
-            <input
-              value={kitchenArea}
-              onChange={(e) => setKitchenArea(e.target.value)}
-              placeholder="Кухня, м²"
-              className="rounded-xl bg-card px-4 py-3 border border-gray-700"
-            />
+            <div>
+              <label className="text-xs text-gray-400">Площадь, м²</label>
+              <input
+                value={area}
+                onChange={(e) => setArea(e.target.value)}
+                required
+                className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400">Площадь кухни</label>
+              <input
+                value={kitchenArea}
+                onChange={(e) => setKitchenArea(e.target.value)}
+                className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white"
+              />
+            </div>
           </div>
 
-          <input
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="Цена, ₽"
-            className="rounded-xl bg-card px-4 py-3 border border-gray-700"
-          />
+          <div>
+            <label className="text-xs text-gray-400">Цена, ₽</label>
+            <input
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              required
+              className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white"
+            />
+          </div>
         </section>
 
         {/* Комиссия */}
-        <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
+        <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Комиссия</h2>
 
           <div className="grid grid-cols-2 gap-3">
-            <select
-              value={commissionPlace}
-              onChange={(e) =>
-                setCommissionPlace(e.target.value as CommissionPlace)
-              }
-              className="rounded-xl bg-card px-4 py-3 border border-gray-700"
-            >
-              <option value="inside">Внутри цены</option>
-              <option value="on_top">Сверху</option>
-            </select>
+            <div>
+              <label className="text-xs text-gray-400">Расположение</label>
+              <select
+                value={commissionPlace}
+                onChange={(e) =>
+                  setCommissionPlace(e.target.value as CommissionPlace)
+                }
+                className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white mt-1"
+              >
+                <option value="inside">Внутри цены</option>
+                <option value="on_top">Сверху</option>
+              </select>
+            </div>
 
-            <select
-              value={commissionValueType}
-              onChange={(e) =>
-                setCommissionValueType(e.target.value as CommissionValueType)
-              }
-              className="rounded-xl bg-card px-4 py-3 border border-gray-700"
-            >
-              <option value="percent">% от сделки</option>
-              <option value="fixed">Фиксированная сумма ₽</option>
-            </select>
+            <div>
+              <label className="text-xs text-gray-400">Тип</label>
+              <select
+                value={commissionValueType}
+                onChange={(e) =>
+                  setCommissionValueType(e.target.value as CommissionValueType)
+                }
+                className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white mt-1"
+              >
+                <option value="percent">%</option>
+                <option value="fixed">₽</option>
+              </select>
+            </div>
           </div>
 
-          <input
-            value={commissionValue}
-            onChange={(e) => setCommissionValue(e.target.value)}
-            placeholder="Размер комиссии"
-            className="rounded-xl bg-card px-4 py-3 border border-gray-700"
-          />
+          <div>
+            <label className="text-xs text-gray-400">
+              Значение комиссии ({commissionValueType === "percent" ? "%" : "₽"})
+            </label>
+            <input
+              value={commissionValue}
+              onChange={(e) => setCommissionValue(e.target.value)}
+              required
+              className="w-full bg-card rounded-xl px-4 py-3 border border-gray-700 text-white"
+            />
+          </div>
         </section>
 
         {/* Фото */}
-        <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-4">
+        <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Фото</h2>
 
-          <button
-            type="button"
-            onClick={() => photoInputRef.current?.click()}
-            className="bg-emerald-600 px-4 py-2 rounded-xl"
-          >
-            + Добавить фото объекта
-          </button>
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => addFiles(e.target.files, "photo")}
-          />
-          {renderFilesPreview(photos)}
+          {/* Фото объекта */}
+          <label className="block">
+            <div className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-center">
+              + Добавить фото объекта
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => addFiles(e.target.files, "photo", photoInputRef)}
+            />
+          </label>
+          {renderPreview(photos)}
 
-          <button
-            type="button"
-            onClick={() => planInputRef.current?.click()}
-            className="bg-neutral-700 px-4 py-2 rounded-xl"
-          >
-            + Фото планировки
-          </button>
-          <input
-            ref={planInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => addFiles(e.target.files, "plan")}
-          />
-          {renderFilesPreview(planPhotos)}
+          {/* Фото планировки */}
+          <label className="block">
+            <div className="rounded-xl bg-neutral-700 px-4 py-2 text-sm text-center">
+              + Фото планировки
+            </div>
+            <input
+              ref={planInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => addFiles(e.target.files, "plan", planInputRef)}
+            />
+          </label>
+          {renderPreview(planPhotos)}
 
-          <button
-            type="button"
-            onClick={() => docInputRef.current?.click()}
-            className="bg-neutral-700 px-4 py-2 rounded-xl"
-          >
-            + Документы (ЕГРН/договор)
-          </button>
-          <input
-            ref={docInputRef}
-            type="file"
-            accept="image/*,application/pdf"
-            className="hidden"
-            onChange={(e) => addFiles(e.target.files, "doc")}
-          />
-          {renderFilesPreview(docPhotos)}
+          {/* Фото документов */}
+          <label className="block">
+            <div className="rounded-xl bg-neutral-700 px-4 py-2 text-sm text-center">
+              + Фото документов (ЕГРН, договор)
+            </div>
+            <input
+              ref={docInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={(e) => addFiles(e.target.files, "doc", docInputRef)}
+            />
+          </label>
+          {renderPreview(docPhotos)}
         </section>
 
         {/* Оферта */}
-        <div className="flex items-start gap-2 text-sm text-gray-300">
+        <div className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"
-            checked={agreed}
-            onChange={(e) => setAgreed(e.target.checked)}
-            className="w-5 h-5"
+            checked={offerAccepted}
+            onChange={(e) => setOfferAccepted(e.target.checked)}
+            className="mt-1"
+            required
           />
-          <span>
-            Я соглашаюсь с условиями оферты и заключаю агентский договор
-            на <b>50 000 ₽</b> в случае продажи объекта.
-          </span>
+          <p className="text-gray-300 text-xs leading-tight">
+            Я подтверждаю, что соглашаюсь с агентским договором и обязуюсь
+            выплатить <b>50 000 ₽</b> в случае продажи объекта через сервис.
+          </p>
         </div>
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full bg-emerald-600 py-3 rounded-2xl disabled:opacity-50 font-semibold"
+          className="w-full rounded-xl bg-emerald-600 py-3 font-semibold text-sm disabled:opacity-50"
         >
           {submitting ? "Отправляем..." : "Отправить на модерацию"}
         </button>
