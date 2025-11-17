@@ -35,10 +35,6 @@ type CommissionPlace = "inside" | "on_top";
 type CommissionValueType = "percent" | "fixed";
 
 export default function AddObject() {
-  const photoInputRef = useRef<HTMLInputElement | null>(null);
-  const planInputRef = useRef<HTMLInputElement | null>(null);
-  const docInputRef = useRef<HTMLInputElement | null>(null);
-
   const [district, setDistrict] = useState("");
   const [street, setStreet] = useState("");
   const [house, setHouse] = useState("");
@@ -62,10 +58,9 @@ export default function AddObject() {
   const [docPhotos, setDocPhotos] = useState<File[]>([]);
 
   const [offerAccepted, setOfferAccepted] = useState(false);
-
   const [submitting, setSubmitting] = useState(false);
 
-  /** --- КРИТИЧЕСКИЙ ФИКС ДЛЯ iOS / Telegram WebApp --- */
+  /** --- Стабильная обработка выбора файла для iOS / Telegram --- */
   const safeAddFile = (
     e: React.ChangeEvent<HTMLInputElement>,
     type: "photo" | "plan" | "doc"
@@ -76,13 +71,13 @@ export default function AddObject() {
       return;
     }
 
-    const file = files[0]; // iOS НЕ поддерживает multiple
+    const file = files[0]; // iOS не поддерживает multiple
 
     if (type === "photo") setPhotos((prev) => [...prev, file]);
     if (type === "plan") setPlanPhotos((prev) => [...prev, file]);
     if (type === "doc") setDocPhotos((prev) => [...prev, file]);
 
-    // Обязательно сбрасываем, иначе iOS перестаёт реагировать
+    // Обязательно сбрасываем input — иначе iOS перестанет работать
     e.target.value = "";
   };
 
@@ -197,6 +192,7 @@ export default function AddObject() {
       <h1 className="text-2xl font-bold mb-4">Добавить объект</h1>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+
         {/* Адрес */}
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Адрес</h2>
@@ -286,60 +282,42 @@ export default function AddObject() {
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Фотографии</h2>
 
-          <button
-            type="button"
-            onClick={() => photoInputRef.current?.click()}
-            className="bg-emerald-600 px-4 py-2 rounded-xl"
-          >
+          {/* ФОТО */}
+          <label className="relative block bg-emerald-600 px-4 py-2 rounded-xl text-center overflow-hidden">
             + Добавить фото объекта
-          </button>
-
-          <input
-            ref={photoInputRef}
-            type="file"
-            // ВАЖНО: без capture — иначе на мобилках открывается только камера
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => safeAddFile(e, "photo")}
-          />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => safeAddFile(e, "photo")}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+          </label>
 
           {renderPreview(photos)}
 
-          <button
-            type="button"
-            onClick={() => planInputRef.current?.click()}
-            className="bg-neutral-700 px-4 py-2 rounded-xl"
-          >
+          {/* ПЛАНИРОВКА */}
+          <label className="relative block bg-neutral-700 px-4 py-2 rounded-xl text-center overflow-hidden">
             + Добавить планировку
-          </button>
-
-          <input
-            ref={planInputRef}
-            type="file"
-            // Также без capture
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => safeAddFile(e, "plan")}
-          />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => safeAddFile(e, "plan")}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+          </label>
 
           {renderPreview(planPhotos)}
 
-          <button
-            type="button"
-            onClick={() => docInputRef.current?.click()}
-            className="bg-neutral-700 px-4 py-2 rounded-xl"
-          >
+          {/* ДОКУМЕНТЫ */}
+          <label className="relative block bg-neutral-700 px-4 py-2 rounded-xl text-center overflow-hidden">
             + Фото документов (ЕГРН/договор)
-          </button>
-
-          <input
-            ref={docInputRef}
-            type="file"
-            // Здесь разрешаем и фото, и файлы (PDF / офисные доки)
-            accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx"
-            className="hidden"
-            onChange={(e) => safeAddFile(e, "doc")}
-          />
+            <input
+              type="file"
+              accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx"
+              onChange={(e) => safeAddFile(e, "doc")}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+          </label>
 
           {renderPreview(docPhotos)}
         </section>
