@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import WebApp from "@twa-dev/sdk";
 import { createObject } from "../lib/api";
 
@@ -35,17 +35,22 @@ const ROOM_TYPES = [
   "Другое",
 ];
 
-type CommissionPlace = "inside" | "on_top";
-type CommissionValueType = "percent" | "fixed";
-
-/* ============================
-   DETECT IOS
-=============================== */
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
 /* ============================
-   COMPRESSOR
+   BOT TOKEN FROM ENV
 =============================== */
+
+const BOT_TOKEN = import.meta.env.VITE_BOT_TOKEN;
+
+if (!BOT_TOKEN) {
+  console.error("ERROR: VITE_BOT_TOKEN not found in env");
+}
+
+/* ============================
+   COMPRESS IMAGE
+=============================== */
+
 async function compressImage(file: File): Promise<File> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -64,8 +69,16 @@ async function compressImage(file: File): Promise<File> {
 
       canvas.toBlob(
         (blob) => {
-          if (!blob) return resolve(file);
-          resolve(new File([blob], file.name.replace(/\.\w+$/, ".webp"), { type: "image/webp" }));
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const compressed = new File(
+            [blob],
+            file.name.replace(/\.\w+$/, ".webp"),
+            { type: "image/webp" }
+          );
+          resolve(compressed);
         },
         "image/webp",
         0.75
@@ -75,7 +88,37 @@ async function compressImage(file: File): Promise<File> {
 }
 
 /* ============================
-   MAIN COMPONENT
+   DOWNLOAD FILE FROM TELEGRAM
+=============================== */
+
+async function downloadFileFromTelegram(fileId: string): Promise<File | null> {
+  try {
+    // 1. Get file_path
+    const getFileUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`;
+    const getFileResp = await fetch(getFileUrl).then((r) => r.json());
+
+    if (!getFileResp.ok) {
+      console.error("File getFile error", getFileResp);
+      return null;
+    }
+
+    const filePath = getFileResp.result.file_path;
+    const downloadUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`;
+
+    // 2. Download file binary
+    const blob = await fetch(downloadUrl).then((r) => r.blob());
+
+    // 3. Convert to File
+    const filename = filePath.split("/").pop() || "file.jpg";
+    return new File([blob], filename, { type: blob.type });
+  } catch (err) {
+    console.error("downloadFileFromTelegram error", err);
+    return null;
+  }
+}
+
+/* ============================
+   MAIN COMPONENT — BEGIN
 =============================== */
 
 export default function AddObject() {
@@ -92,11 +135,10 @@ export default function AddObject() {
   const [kitchenArea, setKitchenArea] = useState("");
   const [price, setPrice] = useState("");
 
-  const [commissionPlace, setCommissionPlace] =
-    useState<CommissionPlace>("inside");
+  const [commissionPlace, setCommissionPlace] = useState("inside");
   const [commissionValue, setCommissionValue] = useState("");
   const [commissionValueType, setCommissionValueType] =
-    useState<CommissionValueType>("percent");
+    useState("percent");
 
   const [photos, setPhotos] = useState<File[]>([]);
   const [planPhotos, setPlanPhotos] = useState<File[]>([]);
@@ -120,422 +162,485 @@ export default function AddObject() {
 
   /* ============================
      REMOVE FILE
-  =============================== */
+  ================================ */
   const removeFile = (
     index: number,
     type: "photo" | "plan" | "doc"
   ) => {
-    if (type === "photo") setPhotos((p) => p.filter((_, i) => i !== index));
-    else if (type === "plan") setPlanPhotos((p) => p.filter((_, i) => i !== index));
-    else setDocPhotos((p) => p.filter((_, i) => i !== index));
-  };
-
-  /* ============================
-     IOS PICKER (PHOTO ONLY)
-  =============================== */
-  const pickIOS = async (target: "photo" | "plan" | "doc") => {
-    try {
-      const tg: any = (window as any).Telegram?.WebApp;
-
-      if (!tg?.showImagePicker) {
-        // Fallback → input
-        document.getElementById(`${target}_fallback`)?.click();
-        return;
-      }
-
-      const res = await tg.showImagePicker({ multiple: true });
-
-      if (!res || !res.images) return;
-      if (!checkLimit(res.images.length)) return;
-
-      const newFiles: File[] = [];
-
-      for (const imgB64 of res.images) {
-        const base64 = imgB64.split(",")[1];
-        const bin = atob(base64);
-        const array = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) array[i] = bin.charCodeAt(i);
-
-        let file = new File([array], `doc_${Date.now()}.jpg`, { type: "image/jpeg" });
-        file = await compressImage(file);
-
-        newFiles.push(file);
-      }
-
-      if (target === "photo") setPhotos((p) => [...p, ...newFiles]);
-      if (target === "plan") setPlanPhotos((p) => [...p, ...newFiles]);
-      if (target === "doc") setDocPhotos((p) => [...p, ...newFiles]);
-    } catch (e) {
-      console.error(e);
-      alert("Не удалось выбрать фото");
+    if (type === "photo") {
+      setPhotos((p) => p.filter((_, i) => i !== index));
+    } else if (type === "plan") {
+      setPlanPhotos((p) => p.filter((_, i) => i !== index));
+    } else {
+      setDocPhotos((p) => p.filter((_, i) => i !== index));
     }
   };
 
   /* ============================
-     FILE INPUT FALLBACK
-  =============================== */
-  const pickWeb = async (
+     LISTEN TO web_app_data
+     (file_id arrives here)
+  ================================ */
+
+  const [pendingTarget, setPendingTarget] =
+    useState<"photo" | "plan" | "doc" | null>(null);
+
+  useEffect(() => {
+    function handler(e: MessageEvent) {
+      if (!e.data?.event) return;
+      if (e.data.event !== "web_app_data") return;
+
+      try {
+        const data = JSON.parse(e.data.data);
+        if (!data.file_id) return;
+
+        if (!pendingTarget) return;
+
+        addFileFromTelegram(data.file_id, pendingTarget);
+      } catch (err) {
+        console.error("web_app_data parse error", err);
+      }
+    }
+
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [pendingTarget]);
+
+  /* ============================
+     ADD FILE FROM TELEGRAM FILE_ID
+  ================================ */
+
+  async function addFileFromTelegram(
+    fileId: string,
+    target: "photo" | "plan" | "doc"
+  ) {
+    try {
+      const file = await downloadFileFromTelegram(fileId);
+      if (!file) {
+        alert("Не удалось загрузить файл");
+        return;
+      }
+
+      if (!checkLimit(1)) return;
+
+      let finalFile = file;
+      if (file.type.startsWith("image/")) {
+        finalFile = await compressImage(file);
+      }
+
+      if (target === "photo") {
+        setPhotos((p) => [...p, finalFile]);
+      } else if (target === "plan") {
+        setPlanPhotos((p) => [...p, finalFile]);
+      } else {
+        setDocPhotos((p) => [...p, finalFile]);
+      }
+    } catch (err) {
+      console.error("addFileFromTelegram error", err);
+      alert("Ошибка обработки файла");
+    } finally {
+      setPendingTarget(null);
+    }
+  }
+
+  /* ============================
+     REQUEST WRITE ACCESS (open picker)
+  ================================ */
+
+  async function openTelegramPicker(
+    target: "photo" | "plan" | "doc"
+  ) {
+    try {
+      setPendingTarget(target);
+
+      const ok = await (window as any).Telegram.WebApp.requestWriteAccess();
+
+      if (!ok) {
+        alert("Telegram не дал доступ на отправку медиа");
+        setPendingTarget(null);
+        return;
+      }
+
+      // Теперь пользователь выбирает фото, Telegram отправляет боту,
+      // бот отвечает web_app_data → ловим в useEffect → сохраняем.
+    } catch (err) {
+      console.error("openTelegramPicker error", err);
+      setPendingTarget(null);
+      alert("Ошибка открытия выбора медиа");
+    }
+  }
+
+  /* ============================
+     FALLBACK FOR ANDROID/DESKTOP
+  ================================ */
+
+  const handleFileInput = async (
     e: React.ChangeEvent<HTMLInputElement>,
     target: "photo" | "plan" | "doc"
   ) => {
     const files = e.target.files;
     if (!files) return;
+
     if (!checkLimit(files.length)) return;
 
     const arr = Array.from(files);
-    const newFiles: File[] = [];
+    const processed: File[] = [];
 
     for (const f of arr) {
+      let out = f;
       if (f.type.startsWith("image/")) {
-        const c = await compressImage(f);
-        newFiles.push(c);
-      } else {
-        newFiles.push(f); // PDF
+        out = await compressImage(f);
       }
+      processed.push(out);
     }
 
-    if (target === "photo") setPhotos((p) => [...p, ...newFiles]);
-    if (target === "plan") setPlanPhotos((p) => [...p, ...newFiles]);
-    if (target === "doc") setDocPhotos((p) => [...p, ...newFiles]);
+    if (target === "photo") setPhotos((p) => [...p, ...processed]);
+    else if (target === "plan") setPlanPhotos((p) => [...p, ...processed]);
+    else setDocPhotos((p) => [...p, ...processed]);
 
     e.target.value = "";
   };
 
   /* ============================
-     PREVIEW
-  =============================== */
-  const Preview = ({
-    files,
-    type,
-  }: {
-    files: File[];
-    type: "photo" | "plan" | "doc";
-  }) => (
-    <div className="flex gap-3 overflow-x-auto mt-2">
-      {files.map((file, i) => {
-        const url = URL.createObjectURL(file);
+   PREVIEW COMPONENT
+================================ */
 
-        return (
-          <div key={i} className="relative w-20 h-20">
-            {type !== "doc" ? (
-              <img
-                src={url}
-                className="w-full h-full object-cover rounded-xl"
-              />
-            ) : (
-              <div className="w-full h-full bg-neutral-800 rounded-xl flex items-center justify-center text-xs">
-                PDF
-              </div>
-            )}
+const Preview = ({
+  files,
+  type,
+}: {
+  files: File[];
+  type: "photo" | "plan" | "doc";
+}) => (
+  <div className="flex gap-3 overflow-x-auto mt-3 pb-1">
+    {files.map((file, i) => {
+      const url = URL.createObjectURL(file);
 
-            <button
-              type="button"
-              onClick={() => removeFile(i, type)}
-              className="absolute top-0 right-0 bg-red-600 text-white w-5 h-5 rounded-full text-xs flex items-center justify-center"
-            >
-              ×
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
+      return (
+        <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden">
+          {file.type.startsWith("image/") ? (
+            <img
+              src={url}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-neutral-700 flex items-center justify-center text-xs">
+              PDF
+            </div>
+          )}
 
-  /* ============================
-     VALIDATE
-  =============================== */
-  const validate = () => {
-    if (!district) return "Выберите район";
-    if (!street.trim()) return "Укажите улицу";
-    if (!house.trim()) return "Укажите дом";
-    if (!floor.trim()) return "Укажите этаж";
+          <button
+            type="button"
+            onClick={() => removeFile(i, type)}
+            className="absolute top-0 right-0 bg-red-600 text-white w-5 h-5 rounded-full text-xs"
+          >
+            ×
+          </button>
+        </div>
+      );
+    })}
+  </div>
+);
 
-    if (!area.trim()) return "Укажите площадь";
-    if (!price.trim()) return "Укажите цену";
-    if (!commissionValue.trim()) return "Укажите комиссию";
+/* ============================
+   VALIDATION
+================================ */
 
-    if (photos.length === 0) return "Добавьте хотя бы одно фото объекта";
-    if (docPhotos.length === 0) return "Добавьте документы";
+const validate = () => {
+  if (!district) return "Выберите район";
+  if (!street.trim()) return "Укажите улицу";
+  if (!house.trim()) return "Укажите дом";
+  if (!floor.trim()) return "Укажите этаж";
+  if (!area.trim()) return "Укажите площадь";
+  if (!price.trim()) return "Укажите цену";
+  if (!commissionValue.trim()) return "Укажите комиссию";
 
-    if (!offerAccepted)
-      return "Нужно согласиться с условиями оферты";
+  if (photos.length === 0) return "Добавьте хотя бы 1 фото";
+  if (docPhotos.length === 0) return "Добавьте документы";
 
-    return null;
-  };
+  if (!offerAccepted)
+    return "Подтвердите согласие с условиями оферты";
 
-  /* ============================
-     SUBMIT
-  =============================== */
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  return null;
+};
 
-    const err = validate();
-    if (err) return alert(err);
+/* ============================
+   SUBMIT
+================================ */
 
-    const tgUser = WebApp.initDataUnsafe?.user;
-    if (!tgUser) return alert("Откройте мини-апп через Telegram");
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    try {
-      setSubmitting(true);
+  const error = validate();
+  if (error) return alert(error);
 
-      const fd = new FormData();
+  const tgUser = WebApp.initDataUnsafe?.user;
+  if (!tgUser) return alert("Откройте мини-апп через Telegram");
 
-      fd.append("owner_id", String(tgUser.id));
-      fd.append("district", district);
-      fd.append("street", street);
-      fd.append("house", house);
-      fd.append("floor", floor);
+  try {
+    setSubmitting(true);
 
-      fd.append("rooms_type", roomsType);
-      if (roomsType === "Другое" && roomsCustom.trim()) {
-        fd.append("rooms_custom", roomsCustom.trim());
-      }
+    const fd = new FormData();
 
-      fd.append("area", area);
-      if (kitchenArea) fd.append("kitchen_area", kitchenArea);
+    fd.append("owner_id", String(tgUser.id));
+    fd.append("district", district);
+    fd.append("street", street);
+    fd.append("house", house);
+    fd.append("floor", floor);
 
-      fd.append("price", price);
-      fd.append("commission_place", commissionPlace);
-      fd.append("commission_value", commissionValue);
-      fd.append("commission_value_type", commissionValueType);
-
-      photos.forEach((f) => fd.append("photos", f));
-      planPhotos.forEach((f) => fd.append("plan_photos", f));
-      docPhotos.forEach((f) => fd.append("doc_photos", f));
-
-      await createObject(fd);
-
-      alert("Объект отправлен!");
-
-      // RESET
-      setDistrict("");
-      setStreet("");
-      setHouse("");
-      setFloor("");
-      setRoomsType("Студия");
-      setRoomsCustom("");
-      setArea("");
-      setKitchenArea("");
-      setPrice("");
-      setCommissionPlace("inside");
-      setCommissionValue("");
-      setCommissionValueType("percent");
-      setPhotos([]);
-      setPlanPhotos([]);
-      setDocPhotos([]);
-      setOfferAccepted(false);
-    } catch (err) {
-      console.error(err);
-      alert("Ошибка отправки");
-    } finally {
-      setSubmitting(false);
+    fd.append("rooms_type", roomsType);
+    if (roomsType === "Другое" && roomsCustom.trim()) {
+      fd.append("rooms_custom", roomsCustom.trim());
     }
-  };
 
-  /* ============================
-     RENDER
-  =============================== */
+    fd.append("area", area);
+    if (kitchenArea) fd.append("kitchen_area", kitchenArea);
 
-  return (
-    <div className="min-h-screen bg-tgBg text-white px-4 pb-20 pt-4">
-      <h1 className="text-2xl font-bold mb-4">Добавить объект</h1>
+    fd.append("price", price);
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+    fd.append("commission_place", commissionPlace);
+    fd.append("commission_value", commissionValue);
+    fd.append("commission_value_type", commissionValueType);
 
-        {/* ADDRESS */}
-        <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-3">
-          <h2 className="font-semibold text-lg">Адрес</h2>
+    photos.forEach((f) => fd.append("photos", f));
+    planPhotos.forEach((f) => fd.append("plan_photos", f));
+    docPhotos.forEach((f) => fd.append("doc_photos", f));
 
-          <label className="text-xs text-gray-400">Район</label>
-          <select
-            value={district}
-            onChange={(e) => setDistrict(e.target.value)}
-            className="w-full bg-card rounded-xl px-4 py-3"
-          >
-            <option value="">Выберите район</option>
-            {DISTRICTS.map((d) => (
-              <option key={d}>{d}</option>
-            ))}
-          </select>
+    await createObject(fd);
 
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              placeholder="Улица"
-              value={street}
-              onChange={(e) => setStreet(e.target.value)}
-              className="bg-card rounded-xl px-4 py-3"
-            />
+    alert("Объект отправлен на модерацию");
 
-            <input
-              placeholder="Дом"
-              value={house}
-              onChange={(e) => setHouse(e.target.value)}
-              className="bg-card rounded-xl px-4 py-3"
-            />
-          </div>
+    // reset
+    setDistrict("");
+    setStreet("");
+    setHouse("");
+    setFloor("");
+    setRoomsType("Студия");
+    setRoomsCustom("");
+    setArea("");
+    setKitchenArea("");
+    setPrice("");
+    setCommissionPlace("inside");
+    setCommissionValue("");
+    setCommissionValueType("percent");
+    setPhotos([]);
+    setPlanPhotos([]);
+    setDocPhotos([]);
+    setOfferAccepted(false);
+  } catch (err) {
+    console.error(err);
+    alert("Ошибка отправки");
+  } finally {
+    setSubmitting(false);
+  }
+};
 
-          <input
-            placeholder="Этаж"
-            value={floor}
-            onChange={(e) => setFloor(e.target.value)}
-            className="bg-card rounded-xl px-4 py-3"
-          />
-        </section>
+/* ============================
+   RENDER
+================================ */
 
-        {/* PARAMETERS */}
-        <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-3">
-          <h2 className="font-semibold text-lg">Параметры</h2>
+return (
+  <div className="min-h-screen bg-tgBg text-white px-4 pb-20 pt-4">
+    <h1 className="text-2xl font-bold mb-4">Добавить объект</h1>
 
-          <select
-            className="bg-card rounded-xl px-4 py-3"
-            value={roomsType}
-            onChange={(e) => setRoomsType(e.target.value)}
-          >
-            {ROOM_TYPES.map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </select>
+    <form className="space-y-6" onSubmit={handleSubmit}>
 
-          {roomsType === "Другое" && (
-            <input
-              placeholder="Свой вариант"
-              value={roomsCustom}
-              onChange={(e) => setRoomsCustom(e.target.value)}
-              className="bg-card rounded-xl px-4 py-3"
-            />
-          )}
+      {/* Адрес */}
+      <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-3">
+        <h2 className="font-semibold text-lg">Адрес</h2>
 
-          <input
-            placeholder="Площадь, м²"
-            value={area}
-            onChange={(e) => setArea(e.target.value)}
-            className="bg-card rounded-xl px-4 py-3"
-          />
-
-          <input
-            placeholder="Площадь кухни"
-            value={kitchenArea}
-            onChange={(e) => setKitchenArea(e.target.value)}
-            className="bg-card rounded-xl px-4 py-3"
-          />
-
-          <input
-            placeholder="Цена"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="bg-card rounded-xl px-4 py-3"
-          />
-        </section>
-
-        {/* FILES */}
-        <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-6">
-          <h2 className="font-semibold text-lg">Фотографии</h2>
-
-          {/* PHOTOS */}
-          <button
-            type="button"
-            onClick={() =>
-              isIOS ? pickIOS("photo") : document.getElementById("photo_in")?.click()
-            }
-            className="bg-emerald-600 w-full py-3 rounded-xl"
-          >
-            + Добавить фото объекта
-          </button>
-
-          {!isIOS && (
-            <input
-              id="photo_in"
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => pickWeb(e, "photo")}
-            />
-          )}
-
-          <Preview files={photos} type="photo" />
-
-          {/* PLANS */}
-          <button
-            type="button"
-            onClick={() =>
-              isIOS ? pickIOS("plan") : document.getElementById("plan_in")?.click()
-            }
-            className="bg-neutral-700 w-full py-3 rounded-xl"
-          >
-            + Добавить планировку
-          </button>
-
-          {!isIOS && (
-            <input
-              id="plan_in"
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => pickWeb(e, "plan")}
-            />
-          )}
-
-          <Preview files={planPhotos} type="plan" />
-
-          {/* DOCUMENTS */}
-          <button
-            type="button"
-            onClick={() =>
-              isIOS
-                ? pickIOS("doc")
-                : document.getElementById("docs_in")?.click()
-            }
-            className="bg-neutral-700 w-full py-3 rounded-xl"
-          >
-            + Фото или PDF документов
-          </button>
-
-          {!isIOS && (
-            <input
-              id="docs_in"
-              type="file"
-              accept="image/*,application/pdf"
-              multiple
-              className="hidden"
-              onChange={(e) => pickWeb(e, "doc")}
-            />
-          )}
-
-          <Preview files={docPhotos} type="doc" />
-        </section>
-
-        {/* OFERTA */}
-        <section className="bg-card2 p-4 rounded-2xl border border-gray-800">
-          <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={offerAccepted}
-              onChange={(e) => setOfferAccepted(e.target.checked)}
-              className="mt-1"
-            />
-            <span>
-              Я соглашаюсь с{" "}
-              <a
-                href="https://krd-agents.ru/oferta"
-                className="text-emerald-300 underline"
-              >
-                условиями публичной оферты
-              </a>
-              .
-            </span>
-          </label>
-        </section>
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="bg-emerald-600 w-full py-3 rounded-xl font-semibold"
+        <select
+          className="w-full bg-card rounded-xl px-4 py-3"
+          value={district}
+          onChange={(e) => setDistrict(e.target.value)}
         >
-          {submitting ? "Отправляем..." : "Отправить на модерацию"}
+          <option value="">Выберите район</option>
+          {DISTRICTS.map((d) => (
+            <option key={d}>{d}</option>
+          ))}
+        </select>
+
+        <div className="grid grid-cols-2 gap-3">
+          <input
+            className="bg-card rounded-xl px-4 py-3"
+            placeholder="Улица"
+            value={street}
+            onChange={(e) => setStreet(e.target.value)}
+          />
+          <input
+            className="bg-card rounded-xl px-4 py-3"
+            placeholder="Дом"
+            value={house}
+            onChange={(e) => setHouse(e.target.value)}
+          />
+        </div>
+
+        <input
+          className="bg-card rounded-xl px-4 py-3"
+          placeholder="Этаж"
+          value={floor}
+          onChange={(e) => setFloor(e.target.value)}
+        />
+      </section>
+
+      {/* Параметры */}
+      <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-3">
+        <h2 className="font-semibold text-lg">Параметры</h2>
+
+        <select
+          className="bg-card rounded-xl px-4 py-3"
+          value={roomsType}
+          onChange={(e) => setRoomsType(e.target.value)}
+        >
+          {ROOM_TYPES.map((r) => (
+            <option key={r}>{r}</option>
+          ))}
+        </select>
+
+        {roomsType === "Другое" && (
+          <input
+            className="bg-card rounded-xl px-4 py-3"
+            placeholder="Свой вариант"
+            value={roomsCustom}
+            onChange={(e) => setRoomsCustom(e.target.value)}
+          />
+        )}
+
+        <input
+          className="bg-card rounded-xl px-4 py-3"
+          placeholder="Площадь, м²"
+          value={area}
+          onChange={(e) => setArea(e.target.value)}
+        />
+
+        <input
+          className="bg-card rounded-xl px-4 py-3"
+          placeholder="Площадь кухни"
+          value={kitchenArea}
+          onChange={(e) => setKitchenArea(e.target.value)}
+        />
+
+        <input
+          className="bg-card rounded-xl px-4 py-3"
+          placeholder="Цена"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+        />
+      </section>
+
+      {/* Файлы */}
+      <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-6">
+        <h2 className="font-semibold text-lg">Фотографии</h2>
+
+        {/* Фото */}
+        <button
+          type="button"
+          className="bg-emerald-600 py-3 rounded-xl w-full"
+          onClick={() =>
+            isIOS
+              ? openTelegramPicker("photo")
+              : document.getElementById("photo_input")?.click()
+          }
+        >
+          + Фото объекта
         </button>
-      </form>
-    </div>
-  );
+
+        {!isIOS && (
+          <input
+            id="photo_input"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) => handleFileInput(e, "photo")}
+            className="hidden"
+          />
+        )}
+
+        <Preview files={photos} type="photo" />
+
+        {/* Планировки */}
+        <button
+          type="button"
+          className="bg-neutral-700 py-3 rounded-xl w-full"
+          onClick={() =>
+            isIOS
+              ? openTelegramPicker("plan")
+              : document.getElementById("plan_input")?.click()
+          }
+        >
+          + Планировки
+        </button>
+
+        {!isIOS && (
+          <input
+            id="plan_input"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) => handleFileInput(e, "plan")}
+            className="hidden"
+          />
+        )}
+
+        <Preview files={planPhotos} type="plan" />
+
+        {/* Документы */}
+        <button
+          type="button"
+          className="bg-neutral-700 py-3 rounded-xl w-full"
+          onClick={() =>
+            isIOS
+              ? openTelegramPicker("doc")
+              : document.getElementById("docs_input")?.click()
+          }
+        >
+          + Фото / PDF документов
+        </button>
+
+        {!isIOS && (
+          <input
+            id="docs_input"
+            type="file"
+            accept="image/*,application/pdf"
+            multiple
+            onChange={(e) => handleFileInput(e, "doc")}
+            className="hidden"
+          />
+        )}
+
+        <Preview files={docPhotos} type="doc" />
+      </section>
+
+      {/* Оферта */}
+      <section className="bg-card2 p-4 rounded-2xl border border-gray-800">
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={offerAccepted}
+            onChange={(e) => setOfferAccepted(e.target.checked)}
+          />
+          <span>
+            Я соглашаюсь с{" "}
+            <a
+              href="https://krd-agents.ru/oferta"
+              target="_blank"
+              className="text-emerald-300 underline"
+            >
+              условиями публичной оферты
+            </a>
+            .
+          </span>
+        </label>
+      </section>
+
+      <button
+        type="submit"
+        disabled={submitting}
+        className="bg-emerald-600 py-3 rounded-xl w-full font-semibold"
+      >
+        {submitting ? "Отправляем..." : "Отправить на модерацию"}
+      </button>
+    </form>
+  </div>
+);
 }
