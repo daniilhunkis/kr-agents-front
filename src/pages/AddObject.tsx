@@ -60,10 +60,16 @@ export default function AddObject() {
   const [offerAccepted, setOfferAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  /** --- ОСНОВНОЙ ФИКС: загрузка файлов через Telegram API --- */
+  /** --- Telegram API: универсальный способ загрузки файлов --- */
   const requestFile = async (type: "photo" | "plan" | "doc") => {
     try {
-      const file = await WebApp.requestFile({
+      const tg = (window as any).Telegram?.WebApp;
+      if (!tg) {
+        alert("Ошибка: мини-апп должен быть открыт внутри Telegram");
+        return;
+      }
+
+      const file = await tg.requestFile({
         mime_types: ["image/*", "application/pdf"],
         multiple: false,
       });
@@ -278,7 +284,7 @@ export default function AddObject() {
           />
         </section>
 
-        {/* Фото */}
+        {/* Фото / файлы */}
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Фотографии</h2>
 
