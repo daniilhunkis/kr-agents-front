@@ -65,7 +65,7 @@ export default function AddObject() {
 
   const [submitting, setSubmitting] = useState(false);
 
-  /** --- КРИТИЧЕСКИЙ ФИКС ДЛЯ iOS WebApp --- */
+  /** --- КРИТИЧЕСКИЙ ФИКС ДЛЯ iOS / Telegram WebApp --- */
   const safeAddFile = (
     e: React.ChangeEvent<HTMLInputElement>,
     type: "photo" | "plan" | "doc"
@@ -197,7 +197,6 @@ export default function AddObject() {
       <h1 className="text-2xl font-bold mb-4">Добавить объект</h1>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-
         {/* Адрес */}
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Адрес</h2>
@@ -298,8 +297,8 @@ export default function AddObject() {
           <input
             ref={photoInputRef}
             type="file"
+            // ВАЖНО: без capture — иначе на мобилках открывается только камера
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={(e) => safeAddFile(e, "photo")}
           />
@@ -317,8 +316,8 @@ export default function AddObject() {
           <input
             ref={planInputRef}
             type="file"
+            // Также без capture
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={(e) => safeAddFile(e, "plan")}
           />
@@ -336,7 +335,8 @@ export default function AddObject() {
           <input
             ref={docInputRef}
             type="file"
-            accept="image/*"
+            // Здесь разрешаем и фото, и файлы (PDF / офисные доки)
+            accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx"
             className="hidden"
             onChange={(e) => safeAddFile(e, "doc")}
           />
@@ -355,10 +355,15 @@ export default function AddObject() {
             />
             <span>
               Я соглашаюсь с{" "}
-              <a href="https://krd-agents.ru/oferta" target="_blank" className="text-emerald-300 underline">
+              <a
+                href="https://krd-agents.ru/oferta"
+                target="_blank"
+                className="text-emerald-300 underline"
+              >
                 условиями публичной оферты
               </a>{" "}
-              и понимаю, что заключаю агентский договор на 50 000 ₽ в случае продажи объекта.
+              и понимаю, что заключаю агентский договор на 50 000 ₽ в случае
+              продажи объекта.
             </span>
           </label>
         </section>
