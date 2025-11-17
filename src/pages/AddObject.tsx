@@ -55,34 +55,14 @@ export default function AddObject() {
 
   const [photos, setPhotos] = useState<File[]>([]);
   const [planPhotos, setPlanPhotos] = useState<File[]>([]);
-  const [docPhotos, setDocPhotos] = useState<File[]>([]);
+  const [docPhotos, setDocPhotos] = useState<File[]>([]); // here only PDF goes from input (images via requestMedia)
 
   const [offerAccepted, setOfferAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // ================================
-  // Multi-upload handler
-  // ================================
-  const handleFiles = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    type: "photo" | "plan" | "doc"
-  ) => {
-    const files = e.target.files;
-    if (!files) return;
-
-    const selected = Array.from(files);
-
-    if (type === "photo") setPhotos((prev) => [...prev, ...selected]);
-    if (type === "plan") setPlanPhotos((prev) => [...prev, ...selected]);
-    if (type === "doc") setDocPhotos((prev) => [...prev, ...selected]);
-
-    // reset input value for repeated selection
-    e.target.value = "";
-  };
-
-  // ================================
-  // Thumbnails preview
-  // ================================
+  // ===========================
+  // PREVIEW
+  // ===========================
   const renderPreview = (files: File[]) => (
     <div className="flex gap-3 overflow-x-auto mt-2">
       {files.map((file, idx) => {
@@ -92,21 +72,68 @@ export default function AddObject() {
             key={idx}
             className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0"
           >
-            <img
-              src={url}
-              className="w-full h-full object-cover"
-              alt="preview"
-            />
+            <img src={url} className="w-full h-full object-cover" />
           </div>
         );
       })}
     </div>
   );
 
-  // ================================
-  // Validation
-  // ================================
-  const validate = (): string | null => {
+  // ===========================
+  // requestMedia() — iOS PHOTO PICKER
+  // ===========================
+  const pickMedia = async (
+    type: "photo" | "plan",
+  ) => {
+    try {
+      const tg: any = (window as any).Telegram?.WebApp;
+      if (!tg) {
+        alert("Мини-апп должен работать внутри Telegram");
+        return;
+      }
+
+      const result = await tg.requestMedia({
+        media_type: ["photo"],
+        max_items: 10,
+      });
+
+      if (!result || !result.media) return;
+
+      const newFiles: File[] = [];
+
+      for (const item of result.media) {
+        const blob = await fetch(item.url).then((r) => r.blob());
+        const file = new File([blob], `photo_${Date.now()}.jpg`, {
+          type: blob.type,
+        });
+        newFiles.push(file);
+      }
+
+      if (type === "photo") setPhotos((prev) => [...prev, ...newFiles]);
+      if (type === "plan") setPlanPhotos((prev) => [...prev, ...newFiles]);
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка выбора медиа");
+    }
+  };
+
+  // ===========================
+  // PDF INPUT FALLBACK
+  // ===========================
+  const handleDocs = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const selected = Array.from(files);
+    setDocPhotos((prev) => [...prev, ...selected]);
+
+    e.target.value = "";
+  };
+
+  // ===========================
+  // VALIDATION
+  // ===========================
+  const validate = () => {
     if (!district) return "Выберите район";
     if (!street.trim()) return "Укажите улицу";
     if (!house.trim()) return "Укажите дом";
@@ -117,8 +144,7 @@ export default function AddObject() {
 
     if (!commissionValue.trim()) return "Укажите комиссию";
 
-    if (photos.length === 0)
-      return "Добавьте минимум одно фото объекта";
+    if (photos.length === 0) return "Добавьте минимум одно фото объекта";
     if (docPhotos.length === 0)
       return "Добавьте документы (ЕГРН/договор)";
 
@@ -128,9 +154,9 @@ export default function AddObject() {
     return null;
   };
 
-  // ================================
-  // Submit
-  // ================================
+  // ===========================
+  // SUBMIT
+  // ===========================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -139,12 +165,13 @@ export default function AddObject() {
 
     const tgUser = WebApp.initDataUnsafe?.user;
     if (!tgUser)
-      return alert("Откройте мини-апп через Telegram бота");
+      return alert("Ошибка: откройте мини-апп через Telegram");
 
     try {
       setSubmitting(true);
 
       const fd = new FormData();
+
       fd.append("owner_id", String(tgUser.id));
       fd.append("district", district);
       fd.append("street", street);
@@ -172,7 +199,8 @@ export default function AddObject() {
 
       alert("Объект отправлен на модерацию 🎉");
 
-      // reset all
+      // RESET
+      setDistrict("");
       setStreet("");
       setHouse("");
       setFloor("");
@@ -196,14 +224,16 @@ export default function AddObject() {
     }
   };
 
+  // ===========================
+  // RENDER
+  // ===========================
   return (
     <div className="min-h-screen bg-tgBg text-white px-4 pb-20 pt-4">
       <h1 className="text-2xl font-bold mb-4">Добавить объект</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* ------------------- */}
+
         {/* Адрес */}
-        {/* ------------------- */}
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Адрес</h2>
 
@@ -242,9 +272,7 @@ export default function AddObject() {
           />
         </section>
 
-        {/* ------------------- */}
         {/* Параметры */}
-        {/* ------------------- */}
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Параметры</h2>
 
@@ -289,71 +317,67 @@ export default function AddObject() {
           />
         </section>
 
-        {/* ------------------- */}
-        {/* Загрузка фото */}
-        {/* ------------------- */}
+        {/* Загрузка файлов */}
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-6">
           <h2 className="font-semibold text-lg">Фотографии</h2>
 
           {/* Фото объекта */}
-          <div className="relative">
-            <button
-              type="button"
-              className="bg-emerald-600 w-full py-3 rounded-xl text-center"
-            >
-              + Добавить фото объекта
-            </button>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => handleFiles(e, "photo")}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-            />
-          </div>
+          <button
+            type="button"
+            onClick={() => pickMedia("photo")}
+            className="bg-emerald-600 w-full py-3 rounded-xl text-center"
+          >
+            + Добавить фото объекта
+          </button>
+
           {renderPreview(photos)}
 
-          {/* Планировка */}
-          <div className="relative">
-            <button
-              type="button"
-              className="bg-neutral-700 w-full py-3 rounded-xl text-center"
-            >
-              + Добавить планировку
-            </button>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => handleFiles(e, "plan")}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-            />
-          </div>
+          {/* Планировки */}
+          <button
+            type="button"
+            onClick={() => pickMedia("plan")}
+            className="bg-neutral-700 w-full py-3 rounded-xl text-center"
+          >
+            + Добавить планировку
+          </button>
+
           {renderPreview(planPhotos)}
 
-          {/* Документы */}
+          {/* Документы (PDF) */}
           <div className="relative">
             <button
               type="button"
               className="bg-neutral-700 w-full py-3 rounded-xl text-center"
             >
-              + Фото документов (ЕГРН/договор)
+              + Загрузить документы (PDF)
             </button>
+
             <input
               type="file"
-              accept="image/*,application/pdf"
+              accept="application/pdf"
               multiple
-              onChange={(e) => handleFiles(e, "doc")}
+              onChange={handleDocs}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
           </div>
-          {renderPreview(docPhotos)}
+
+          {/* PDF preview — показываем иконками */}
+          {docPhotos.length > 0 && (
+            <div className="flex gap-3 mt-2">
+              {docPhotos.map((f, i) => (
+                <div
+                  key={i}
+                  className="w-20 h-20 bg-neutral-800 rounded-xl flex items-center justify-center text-xs text-gray-300"
+                >
+                  PDF
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
-        {/* ------------------- */}
         {/* Оферта */}
-        {/* ------------------- */}
-        <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-2">
+        <section className="bg-card2 rounded-2xl p-4 border border-gray-800">
           <label className="flex items-start gap-3 text-sm">
             <input
               type="checkbox"
