@@ -39,28 +39,28 @@ type CommissionPlace = "inside" | "on_top";
 type CommissionValueType = "percent" | "fixed";
 
 /* ============================
-   iOS DETECTOR
+   DETECT IOS
 =============================== */
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
 /* ============================
-   IMAGE COMPRESSOR (JPEG/WebP)
+   COMPRESSOR
 =============================== */
-async function compressImage(file: File, maxWidth = 1600, quality = 0.75): Promise<File> {
+async function compressImage(file: File): Promise<File> {
   return new Promise((resolve) => {
     const img = new Image();
     img.src = URL.createObjectURL(file);
 
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      const scale = maxWidth / img.width;
-      const width = img.width > maxWidth ? maxWidth : img.width;
-      const height = img.width > maxWidth ? img.height * scale : img.height;
+      const MAX_WIDTH = 1600;
 
-      canvas.width = width;
-      canvas.height = height;
+      const scale = Math.min(1, MAX_WIDTH / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+
       const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, width, height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
       canvas.toBlob(
         (blob) => {
@@ -68,7 +68,7 @@ async function compressImage(file: File, maxWidth = 1600, quality = 0.75): Promi
           resolve(new File([blob], file.name.replace(/\.\w+$/, ".webp"), { type: "image/webp" }));
         },
         "image/webp",
-        quality
+        0.75
       );
     };
   });
@@ -98,7 +98,6 @@ export default function AddObject() {
   const [commissionValueType, setCommissionValueType] =
     useState<CommissionValueType>("percent");
 
-  /* FILE STATES */
   const [photos, setPhotos] = useState<File[]>([]);
   const [planPhotos, setPlanPhotos] = useState<File[]>([]);
   const [docPhotos, setDocPhotos] = useState<File[]>([]);
@@ -108,14 +107,10 @@ export default function AddObject() {
 
   const MAX_FILES = 24;
 
-  /* ============================
-     HELPERS
-  =============================== */
-
   const totalFiles = () =>
     photos.length + planPhotos.length + docPhotos.length;
 
-  const ensureLimit = (count: number) => {
+  const checkLimit = (count: number) => {
     if (totalFiles() + count > MAX_FILES) {
       alert(`Максимум ${MAX_FILES} файлов`);
       return false;
@@ -124,100 +119,131 @@ export default function AddObject() {
   };
 
   /* ============================
-     DELETE BUTTON
+     REMOVE FILE
   =============================== */
   const removeFile = (
     index: number,
-    from: "photo" | "plan" | "doc"
+    type: "photo" | "plan" | "doc"
   ) => {
-    if (from === "photo") {
-      setPhotos((prev) => prev.filter((_, i) => i !== index));
-    } else if (from === "plan") {
-      setPlanPhotos((prev) => prev.filter((_, i) => i !== index));
-    } else {
-      setDocPhotos((prev) => prev.filter((_, i) => i !== index));
-    }
+    if (type === "photo") setPhotos((p) => p.filter((_, i) => i !== index));
+    else if (type === "plan") setPlanPhotos((p) => p.filter((_, i) => i !== index));
+    else setDocPhotos((p) => p.filter((_, i) => i !== index));
   };
 
   /* ============================
-     iOS PHOTO PICKER
+     IOS PICKER (PHOTO ONLY)
   =============================== */
-  const pickImagesIOS = async (target: "photo" | "plan") => {
+  const pickIOS = async (target: "photo" | "plan" | "doc") => {
     try {
       const tg: any = (window as any).Telegram?.WebApp;
+
+      if (!tg?.showImagePicker) {
+        // Fallback → input
+        document.getElementById(`${target}_fallback`)?.click();
+        return;
+      }
+
       const res = await tg.showImagePicker({ multiple: true });
 
       if (!res || !res.images) return;
-
-      if (!ensureLimit(res.images.length)) return;
+      if (!checkLimit(res.images.length)) return;
 
       const newFiles: File[] = [];
 
-      for (const base64 of res.images) {
-        const binary = atob(base64.split(",")[1]);
-        const array = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+      for (const imgB64 of res.images) {
+        const base64 = imgB64.split(",")[1];
+        const bin = atob(base64);
+        const array = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) array[i] = bin.charCodeAt(i);
 
-        let file = new File([array], `photo_${Date.now()}.jpg`, {
-          type: "image/jpeg",
-        });
-
+        let file = new File([array], `doc_${Date.now()}.jpg`, { type: "image/jpeg" });
         file = await compressImage(file);
+
         newFiles.push(file);
       }
 
       if (target === "photo") setPhotos((p) => [...p, ...newFiles]);
       if (target === "plan") setPlanPhotos((p) => [...p, ...newFiles]);
-    } catch (err) {
-      console.error(err);
+      if (target === "doc") setDocPhotos((p) => [...p, ...newFiles]);
+    } catch (e) {
+      console.error(e);
       alert("Не удалось выбрать фото");
     }
   };
 
   /* ============================
-     ANDROID/DESKTOP INPUT PICKER
+     FILE INPUT FALLBACK
   =============================== */
-  const pickImagesWeb = async (
+  const pickWeb = async (
     e: React.ChangeEvent<HTMLInputElement>,
-    target: "photo" | "plan"
+    target: "photo" | "plan" | "doc"
   ) => {
     const files = e.target.files;
     if (!files) return;
-
-    if (!ensureLimit(files.length)) return;
+    if (!checkLimit(files.length)) return;
 
     const arr = Array.from(files);
     const newFiles: File[] = [];
 
     for (const f of arr) {
-      const compressed = await compressImage(f);
-      newFiles.push(compressed);
+      if (f.type.startsWith("image/")) {
+        const c = await compressImage(f);
+        newFiles.push(c);
+      } else {
+        newFiles.push(f); // PDF
+      }
     }
 
     if (target === "photo") setPhotos((p) => [...p, ...newFiles]);
     if (target === "plan") setPlanPhotos((p) => [...p, ...newFiles]);
+    if (target === "doc") setDocPhotos((p) => [...p, ...newFiles]);
 
     e.target.value = "";
   };
 
   /* ============================
-     PDF FILE PICKER (ANDROID/PC ONLY)
+     PREVIEW
   =============================== */
-  const handleDocs = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
+  const Preview = ({
+    files,
+    type,
+  }: {
+    files: File[];
+    type: "photo" | "plan" | "doc";
+  }) => (
+    <div className="flex gap-3 overflow-x-auto mt-2">
+      {files.map((file, i) => {
+        const url = URL.createObjectURL(file);
 
-    if (!ensureLimit(files.length)) return;
+        return (
+          <div key={i} className="relative w-20 h-20">
+            {type !== "doc" ? (
+              <img
+                src={url}
+                className="w-full h-full object-cover rounded-xl"
+              />
+            ) : (
+              <div className="w-full h-full bg-neutral-800 rounded-xl flex items-center justify-center text-xs">
+                PDF
+              </div>
+            )}
 
-    setDocPhotos((p) => [...p, ...Array.from(files)]);
-
-    e.target.value = "";
-  };
+            <button
+              type="button"
+              onClick={() => removeFile(i, type)}
+              className="absolute top-0 right-0 bg-red-600 text-white w-5 h-5 rounded-full text-xs flex items-center justify-center"
+            >
+              ×
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   /* ============================
-     VALIDATION
+     VALIDATE
   =============================== */
-
   const validate = () => {
     if (!district) return "Выберите район";
     if (!street.trim()) return "Укажите улицу";
@@ -228,11 +254,11 @@ export default function AddObject() {
     if (!price.trim()) return "Укажите цену";
     if (!commissionValue.trim()) return "Укажите комиссию";
 
-    if (photos.length === 0) return "Добавьте минимум одно фото";
-    if (docPhotos.length === 0) return "Добавьте документы (фото или PDF)";
+    if (photos.length === 0) return "Добавьте хотя бы одно фото объекта";
+    if (docPhotos.length === 0) return "Добавьте документы";
 
     if (!offerAccepted)
-      return "Вы должны согласиться с условиями оферты";
+      return "Нужно согласиться с условиями оферты";
 
     return null;
   };
@@ -240,7 +266,6 @@ export default function AddObject() {
   /* ============================
      SUBMIT
   =============================== */
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -248,7 +273,7 @@ export default function AddObject() {
     if (err) return alert(err);
 
     const tgUser = WebApp.initDataUnsafe?.user;
-    if (!tgUser) return alert("Ошибка: откройте мини-апп через Telegram");
+    if (!tgUser) return alert("Откройте мини-апп через Telegram");
 
     try {
       setSubmitting(true);
@@ -268,8 +293,8 @@ export default function AddObject() {
 
       fd.append("area", area);
       if (kitchenArea) fd.append("kitchen_area", kitchenArea);
-      fd.append("price", price);
 
+      fd.append("price", price);
       fd.append("commission_place", commissionPlace);
       fd.append("commission_value", commissionValue);
       fd.append("commission_value_type", commissionValueType);
@@ -280,8 +305,9 @@ export default function AddObject() {
 
       await createObject(fd);
 
-      alert("Объект отправлен на модерацию!");
+      alert("Объект отправлен!");
 
+      // RESET
       setDistrict("");
       setStreet("");
       setHouse("");
@@ -307,46 +333,6 @@ export default function AddObject() {
   };
 
   /* ============================
-     PREVIEW COMPONENT
-  =============================== */
-
-  const Preview = ({
-    files,
-    type,
-  }: {
-    files: File[];
-    type: "photo" | "plan" | "doc";
-  }) => (
-    <div className="flex gap-3 mt-2 overflow-x-auto">
-      {files.map((file, idx) => {
-        const url = URL.createObjectURL(file);
-        return (
-          <div key={idx} className="relative w-20 h-20">
-            {type !== "doc" ? (
-              <img
-                src={url}
-                className="w-full h-full object-cover rounded-xl"
-              />
-            ) : (
-              <div className="w-full h-full bg-neutral-800 rounded-xl flex items-center justify-center text-xs">
-                PDF
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => removeFile(idx, type)}
-              className="absolute top-0 right-0 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded-full text-xs"
-            >
-              ×
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  /* ============================
      RENDER
   =============================== */
 
@@ -357,14 +343,14 @@ export default function AddObject() {
       <form onSubmit={handleSubmit} className="space-y-6">
 
         {/* ADDRESS */}
-        <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
+        <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Адрес</h2>
 
           <label className="text-xs text-gray-400">Район</label>
           <select
             value={district}
             onChange={(e) => setDistrict(e.target.value)}
-            className="w-full rounded-xl bg-card px-4 py-3"
+            className="w-full bg-card rounded-xl px-4 py-3"
           >
             <option value="">Выберите район</option>
             {DISTRICTS.map((d) => (
@@ -375,29 +361,29 @@ export default function AddObject() {
           <div className="grid grid-cols-2 gap-3">
             <input
               placeholder="Улица"
-              className="bg-card rounded-xl px-4 py-3"
               value={street}
               onChange={(e) => setStreet(e.target.value)}
+              className="bg-card rounded-xl px-4 py-3"
             />
 
             <input
               placeholder="Дом"
-              className="bg-card rounded-xl px-4 py-3"
               value={house}
               onChange={(e) => setHouse(e.target.value)}
+              className="bg-card rounded-xl px-4 py-3"
             />
           </div>
 
           <input
             placeholder="Этаж"
-            className="bg-card rounded-xl px-4 py-3"
             value={floor}
             onChange={(e) => setFloor(e.target.value)}
+            className="bg-card rounded-xl px-4 py-3"
           />
         </section>
 
         {/* PARAMETERS */}
-        <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
+        <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Параметры</h2>
 
           <select
@@ -413,42 +399,44 @@ export default function AddObject() {
           {roomsType === "Другое" && (
             <input
               placeholder="Свой вариант"
-              className="bg-card rounded-xl px-4 py-3"
               value={roomsCustom}
               onChange={(e) => setRoomsCustom(e.target.value)}
+              className="bg-card rounded-xl px-4 py-3"
             />
           )}
 
           <input
             placeholder="Площадь, м²"
-            className="bg-card rounded-xl px-4 py-3"
             value={area}
             onChange={(e) => setArea(e.target.value)}
+            className="bg-card rounded-xl px-4 py-3"
           />
 
           <input
             placeholder="Площадь кухни"
-            className="bg-card rounded-xl px-4 py-3"
             value={kitchenArea}
             onChange={(e) => setKitchenArea(e.target.value)}
+            className="bg-card rounded-xl px-4 py-3"
           />
 
           <input
             placeholder="Цена"
-            className="bg-card rounded-xl px-4 py-3"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
+            className="bg-card rounded-xl px-4 py-3"
           />
         </section>
 
-        {/* FILE UPLOAD */}
-        <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-6">
+        {/* FILES */}
+        <section className="bg-card2 p-4 rounded-2xl border border-gray-800 space-y-6">
           <h2 className="font-semibold text-lg">Фотографии</h2>
 
           {/* PHOTOS */}
           <button
             type="button"
-            onClick={() => (isIOS ? pickImagesIOS("photo") : document.getElementById("photo_web")?.click())}
+            onClick={() =>
+              isIOS ? pickIOS("photo") : document.getElementById("photo_in")?.click()
+            }
             className="bg-emerald-600 w-full py-3 rounded-xl"
           >
             + Добавить фото объекта
@@ -456,12 +444,12 @@ export default function AddObject() {
 
           {!isIOS && (
             <input
-              id="photo_web"
+              id="photo_in"
               type="file"
               accept="image/*"
               multiple
               className="hidden"
-              onChange={(e) => pickImagesWeb(e, "photo")}
+              onChange={(e) => pickWeb(e, "photo")}
             />
           )}
 
@@ -470,7 +458,9 @@ export default function AddObject() {
           {/* PLANS */}
           <button
             type="button"
-            onClick={() => (isIOS ? pickImagesIOS("plan") : document.getElementById("plan_web")?.click())}
+            onClick={() =>
+              isIOS ? pickIOS("plan") : document.getElementById("plan_in")?.click()
+            }
             className="bg-neutral-700 w-full py-3 rounded-xl"
           >
             + Добавить планировку
@@ -478,52 +468,46 @@ export default function AddObject() {
 
           {!isIOS && (
             <input
-              id="plan_web"
+              id="plan_in"
               type="file"
               accept="image/*"
               multiple
               className="hidden"
-              onChange={(e) => pickImagesWeb(e, "plan")}
+              onChange={(e) => pickWeb(e, "plan")}
             />
           )}
 
           <Preview files={planPhotos} type="plan" />
 
-          {/* DOCUMENTS — ONLY ANDROID/DESKTOP */}
+          {/* DOCUMENTS */}
+          <button
+            type="button"
+            onClick={() =>
+              isIOS
+                ? pickIOS("doc")
+                : document.getElementById("docs_in")?.click()
+            }
+            className="bg-neutral-700 w-full py-3 rounded-xl"
+          >
+            + Фото или PDF документов
+          </button>
+
           {!isIOS && (
-            <>
-              <div className="relative">
-                <button
-                  type="button"
-                  className="bg-neutral-700 w-full py-3 rounded-xl text-center"
-                  onClick={() => document.getElementById("docs_pdf")?.click()}
-                >
-                  + Загрузить документы (PDF)
-                </button>
-                <input
-                  id="docs_pdf"
-                  type="file"
-                  accept="application/pdf"
-                  multiple
-                  className="hidden"
-                  onChange={handleDocs}
-                />
-              </div>
-
-              <Preview files={docPhotos} type="doc" />
-            </>
+            <input
+              id="docs_in"
+              type="file"
+              accept="image/*,application/pdf"
+              multiple
+              className="hidden"
+              onChange={(e) => pickWeb(e, "doc")}
+            />
           )}
 
-          {/* iOS DOES NOT SUPPORT PDF SELECTION INSIDE TELEGRAM */}
-          {isIOS && (
-            <p className="text-xs text-gray-400">
-              На iOS документы можно загружать только как фото (через камеру)
-            </p>
-          )}
+          <Preview files={docPhotos} type="doc" />
         </section>
 
         {/* OFERTA */}
-        <section className="bg-card2 rounded-2xl p-4 border border-gray-800">
+        <section className="bg-card2 p-4 rounded-2xl border border-gray-800">
           <label className="flex items-start gap-3 text-sm">
             <input
               type="checkbox"
@@ -537,7 +521,7 @@ export default function AddObject() {
                 href="https://krd-agents.ru/oferta"
                 className="text-emerald-300 underline"
               >
-                условиями оферты
+                условиями публичной оферты
               </a>
               .
             </span>
