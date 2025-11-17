@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import WebApp from "@twa-dev/sdk";
 import { createObject } from "../lib/api";
 
@@ -60,25 +60,25 @@ export default function AddObject() {
   const [offerAccepted, setOfferAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  /** --- Стабильная обработка выбора файла для iOS / Telegram --- */
-  const safeAddFile = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    type: "photo" | "plan" | "doc"
-  ) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) {
-      e.target.value = "";
-      return;
+  /** --- ОСНОВНОЙ ФИКС: загрузка файлов через Telegram API --- */
+  const requestFile = async (type: "photo" | "plan" | "doc") => {
+    try {
+      const file = await WebApp.requestFile({
+        mime_types: ["image/*", "application/pdf"],
+        multiple: false,
+      });
+
+      if (!file) return;
+
+      const blob = await fetch(file.file_url).then((r) => r.blob());
+      const f = new File([blob], file.file_name, { type: blob.type });
+
+      if (type === "photo") setPhotos((prev) => [...prev, f]);
+      if (type === "plan") setPlanPhotos((prev) => [...prev, f]);
+      if (type === "doc") setDocPhotos((prev) => [...prev, f]);
+    } catch (err) {
+      console.error("requestFile error:", err);
     }
-
-    const file = files[0]; // iOS не поддерживает multiple
-
-    if (type === "photo") setPhotos((prev) => [...prev, file]);
-    if (type === "plan") setPlanPhotos((prev) => [...prev, file]);
-    if (type === "doc") setDocPhotos((prev) => [...prev, file]);
-
-    // Обязательно сбрасываем input — иначе iOS перестанет работать
-    e.target.value = "";
   };
 
   const validate = (): string | null => {
@@ -113,7 +113,7 @@ export default function AddObject() {
 
     const tgUser = WebApp.initDataUnsafe?.user;
     if (!tgUser) {
-      alert("Ошибка: откройте приложение через Telegram-бота");
+      alert("Ошибка: откройте мини-апп через Telegram-бота");
       return;
     }
 
@@ -282,42 +282,33 @@ export default function AddObject() {
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Фотографии</h2>
 
-          {/* ФОТО */}
-          <label className="relative block bg-emerald-600 px-4 py-2 rounded-xl text-center overflow-hidden">
+          <button
+            type="button"
+            onClick={() => requestFile("photo")}
+            className="bg-emerald-600 px-4 py-2 rounded-xl w-full"
+          >
             + Добавить фото объекта
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => safeAddFile(e, "photo")}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-          </label>
+          </button>
 
           {renderPreview(photos)}
 
-          {/* ПЛАНИРОВКА */}
-          <label className="relative block bg-neutral-700 px-4 py-2 rounded-xl text-center overflow-hidden">
+          <button
+            type="button"
+            onClick={() => requestFile("plan")}
+            className="bg-neutral-700 px-4 py-2 rounded-xl w-full"
+          >
             + Добавить планировку
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => safeAddFile(e, "plan")}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-          </label>
+          </button>
 
           {renderPreview(planPhotos)}
 
-          {/* ДОКУМЕНТЫ */}
-          <label className="relative block bg-neutral-700 px-4 py-2 rounded-xl text-center overflow-hidden">
+          <button
+            type="button"
+            onClick={() => requestFile("doc")}
+            className="bg-neutral-700 px-4 py-2 rounded-xl w-full"
+          >
             + Фото документов (ЕГРН/договор)
-            <input
-              type="file"
-              accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx"
-              onChange={(e) => safeAddFile(e, "doc")}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-          </label>
+          </button>
 
           {renderPreview(docPhotos)}
         </section>
