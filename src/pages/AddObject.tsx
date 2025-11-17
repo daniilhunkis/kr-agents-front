@@ -60,33 +60,52 @@ export default function AddObject() {
   const [offerAccepted, setOfferAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  /** --- Telegram API: универсальный способ загрузки файлов --- */
-  const requestFile = async (type: "photo" | "plan" | "doc") => {
-    try {
-      const tg = (window as any).Telegram?.WebApp;
-      if (!tg) {
-        alert("Ошибка: мини-апп должен быть открыт внутри Telegram");
-        return;
-      }
+  // ================================
+  // Multi-upload handler
+  // ================================
+  const handleFiles = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: "photo" | "plan" | "doc"
+  ) => {
+    const files = e.target.files;
+    if (!files) return;
 
-      const file = await tg.requestFile({
-        mime_types: ["image/*", "application/pdf"],
-        multiple: false,
-      });
+    const selected = Array.from(files);
 
-      if (!file) return;
+    if (type === "photo") setPhotos((prev) => [...prev, ...selected]);
+    if (type === "plan") setPlanPhotos((prev) => [...prev, ...selected]);
+    if (type === "doc") setDocPhotos((prev) => [...prev, ...selected]);
 
-      const blob = await fetch(file.file_url).then((r) => r.blob());
-      const f = new File([blob], file.file_name, { type: blob.type });
-
-      if (type === "photo") setPhotos((prev) => [...prev, f]);
-      if (type === "plan") setPlanPhotos((prev) => [...prev, f]);
-      if (type === "doc") setDocPhotos((prev) => [...prev, f]);
-    } catch (err) {
-      console.error("requestFile error:", err);
-    }
+    // reset input value for repeated selection
+    e.target.value = "";
   };
 
+  // ================================
+  // Thumbnails preview
+  // ================================
+  const renderPreview = (files: File[]) => (
+    <div className="flex gap-3 overflow-x-auto mt-2">
+      {files.map((file, idx) => {
+        const url = URL.createObjectURL(file);
+        return (
+          <div
+            key={idx}
+            className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0"
+          >
+            <img
+              src={url}
+              className="w-full h-full object-cover"
+              alt="preview"
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ================================
+  // Validation
+  // ================================
   const validate = (): string | null => {
     if (!district) return "Выберите район";
     if (!street.trim()) return "Укажите улицу";
@@ -98,7 +117,8 @@ export default function AddObject() {
 
     if (!commissionValue.trim()) return "Укажите комиссию";
 
-    if (photos.length === 0) return "Добавьте минимум одно фото объекта";
+    if (photos.length === 0)
+      return "Добавьте минимум одно фото объекта";
     if (docPhotos.length === 0)
       return "Добавьте документы (ЕГРН/договор)";
 
@@ -108,20 +128,18 @@ export default function AddObject() {
     return null;
   };
 
+  // ================================
+  // Submit
+  // ================================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const err = validate();
-    if (err) {
-      alert(err);
-      return;
-    }
+    if (err) return alert(err);
 
     const tgUser = WebApp.initDataUnsafe?.user;
-    if (!tgUser) {
-      alert("Ошибка: откройте мини-апп через Telegram-бота");
-      return;
-    }
+    if (!tgUser)
+      return alert("Откройте мини-апп через Telegram бота");
 
     try {
       setSubmitting(true);
@@ -154,7 +172,7 @@ export default function AddObject() {
 
       alert("Объект отправлен на модерацию 🎉");
 
-      // сброс формы
+      // reset all
       setStreet("");
       setHouse("");
       setFloor("");
@@ -172,34 +190,20 @@ export default function AddObject() {
       setOfferAccepted(false);
     } catch (err) {
       console.error(err);
-      alert("Ошибка при отправке. Попробуйте позже.");
+      alert("Ошибка при отправке");
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const renderPreview = (files: File[]) => {
-    return (
-      <div className="flex gap-2 overflow-x-auto mt-2">
-        {files.map((file, idx) => (
-          <div
-            key={idx}
-            className="w-20 h-20 bg-neutral-800 rounded-xl flex items-center justify-center text-[10px] px-1 text-center"
-          >
-            {file.name}
-          </div>
-        ))}
-      </div>
-    );
   };
 
   return (
     <div className="min-h-screen bg-tgBg text-white px-4 pb-20 pt-4">
       <h1 className="text-2xl font-bold mb-4">Добавить объект</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* ------------------- */}
         {/* Адрес */}
+        {/* ------------------- */}
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Адрес</h2>
 
@@ -222,7 +226,6 @@ export default function AddObject() {
               value={street}
               onChange={(e) => setStreet(e.target.value)}
             />
-
             <input
               placeholder="Дом"
               className="bg-card rounded-xl px-4 py-3"
@@ -239,7 +242,9 @@ export default function AddObject() {
           />
         </section>
 
+        {/* ------------------- */}
         {/* Параметры */}
+        {/* ------------------- */}
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
           <h2 className="font-semibold text-lg">Параметры</h2>
 
@@ -284,42 +289,70 @@ export default function AddObject() {
           />
         </section>
 
-        {/* Фото / файлы */}
-        <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-3">
+        {/* ------------------- */}
+        {/* Загрузка фото */}
+        {/* ------------------- */}
+        <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-6">
           <h2 className="font-semibold text-lg">Фотографии</h2>
 
-          <button
-            type="button"
-            onClick={() => requestFile("photo")}
-            className="bg-emerald-600 px-4 py-2 rounded-xl w-full"
-          >
-            + Добавить фото объекта
-          </button>
-
+          {/* Фото объекта */}
+          <div className="relative">
+            <button
+              type="button"
+              className="bg-emerald-600 w-full py-3 rounded-xl text-center"
+            >
+              + Добавить фото объекта
+            </button>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => handleFiles(e, "photo")}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+            />
+          </div>
           {renderPreview(photos)}
 
-          <button
-            type="button"
-            onClick={() => requestFile("plan")}
-            className="bg-neutral-700 px-4 py-2 rounded-xl w-full"
-          >
-            + Добавить планировку
-          </button>
-
+          {/* Планировка */}
+          <div className="relative">
+            <button
+              type="button"
+              className="bg-neutral-700 w-full py-3 rounded-xl text-center"
+            >
+              + Добавить планировку
+            </button>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => handleFiles(e, "plan")}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+            />
+          </div>
           {renderPreview(planPhotos)}
 
-          <button
-            type="button"
-            onClick={() => requestFile("doc")}
-            className="bg-neutral-700 px-4 py-2 rounded-xl w-full"
-          >
-            + Фото документов (ЕГРН/договор)
-          </button>
-
+          {/* Документы */}
+          <div className="relative">
+            <button
+              type="button"
+              className="bg-neutral-700 w-full py-3 rounded-xl text-center"
+            >
+              + Фото документов (ЕГРН/договор)
+            </button>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              multiple
+              onChange={(e) => handleFiles(e, "doc")}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+            />
+          </div>
           {renderPreview(docPhotos)}
         </section>
 
+        {/* ------------------- */}
         {/* Оферта */}
+        {/* ------------------- */}
         <section className="bg-card2 rounded-2xl p-4 border border-gray-800 space-y-2">
           <label className="flex items-start gap-3 text-sm">
             <input
@@ -332,8 +365,8 @@ export default function AddObject() {
               Я соглашаюсь с{" "}
               <a
                 href="https://krd-agents.ru/oferta"
-                target="_blank"
                 className="text-emerald-300 underline"
+                target="_blank"
               >
                 условиями публичной оферты
               </a>{" "}
